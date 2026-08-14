@@ -66,6 +66,10 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /v1/sandboxes/{sandbox}/evidence", s.getEvidence)
 	s.mux.HandleFunc("POST /v1/sandboxes/{sandbox}/evidence/override-substrate", s.overrideSubstrate)
 	s.mux.HandleFunc("POST /v1/sandboxes/{sandbox}/allowlist-requests", s.requestAllowlist)
+	s.mux.HandleFunc("GET /v1/sandboxes/{sandbox}/explain", s.explain)
+	s.mux.HandleFunc("GET /v1/sandboxes/{sandbox}/workloads/{workload}/logs", s.workloadLogs)
+	s.mux.HandleFunc("POST /v1/sandboxes/{sandbox}/exec", s.execInWorkload)
+	s.mux.HandleFunc("POST /v1/sandboxes/{sandbox}/port-forward", s.portForward)
 	s.mux.HandleFunc("POST /v1/apply", s.apply)
 	s.mux.HandleFunc("GET /v1/bundles/{digest}", s.getBundle)
 	s.mux.HandleFunc("POST /v1/scm/events", s.scmEvent)
@@ -447,6 +451,56 @@ func (s *Server) requestAllowlist(w http.ResponseWriter, r *http.Request) {
 	}
 	err := s.core.RequestAllowlistChange(r.PathValue("sandbox"), actor(r), req.FQDN)
 	writeErr(w, err)
+}
+
+func (s *Server) explain(w http.ResponseWriter, r *http.Request) {
+	out, err := s.core.Explain(r.PathValue("sandbox"))
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	writeJSON(w, 200, out)
+}
+
+func (s *Server) workloadLogs(w http.ResponseWriter, r *http.Request) {
+	out, err := s.core.Logs(r.PathValue("sandbox"), r.PathValue("workload"), actor(r))
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	writeJSON(w, 200, map[string]string{"logs": out})
+}
+
+func (s *Server) execInWorkload(w http.ResponseWriter, r *http.Request) {
+	req, ok := decode[struct {
+		Workload string `json:"workload"`
+		Command  string `json:"command"`
+	}](w, r)
+	if !ok {
+		return
+	}
+	out, err := s.core.Exec(r.PathValue("sandbox"), req.Workload, req.Command, actor(r))
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	writeJSON(w, 200, map[string]string{"output": out})
+}
+
+func (s *Server) portForward(w http.ResponseWriter, r *http.Request) {
+	req, ok := decode[struct {
+		Workload string `json:"workload"`
+		Port     int    `json:"port"`
+	}](w, r)
+	if !ok {
+		return
+	}
+	out, err := s.core.PortForward(r.PathValue("sandbox"), req.Workload, req.Port, actor(r))
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	writeJSON(w, 200, out)
 }
 
 func (s *Server) apply(w http.ResponseWriter, r *http.Request) {

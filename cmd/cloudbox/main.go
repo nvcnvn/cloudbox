@@ -22,9 +22,21 @@ func main() {
 	}
 	args := os.Args[1:]
 	// --server names the control plane for online commands; check (X3) never
-	// uses it — it must work with no cluster and no server at all.
-	if len(args) >= 2 && args[0] == "--server" {
-		args = args[2:]
+	// uses it — it must work with no cluster and no server at all. --as is
+	// the acting identity (a real deployment gets this from login).
+	cl := &client{}
+	for len(args) >= 2 {
+		if args[0] == "--server" {
+			cl.server = args[1]
+			args = args[2:]
+			continue
+		}
+		if args[0] == "--as" {
+			cl.as = args[1]
+			args = args[2:]
+			continue
+		}
+		break
 	}
 	if len(args) == 0 {
 		fmt.Fprint(os.Stderr, usage)
@@ -33,6 +45,14 @@ func main() {
 	switch args[0] {
 	case "check":
 		os.Exit(runCheck(args[1:]))
+	case "status":
+		os.Exit(runStatus(cl, args[1:]))
+	case "logs":
+		os.Exit(runLogs(cl, args[1:]))
+	case "exec":
+		os.Exit(runExec(cl, args[1:]))
+	case "port-forward":
+		os.Exit(runPortForward(cl, args[1:]))
 	case "version":
 		fmt.Println("cloudbox v1 (development)")
 	default:

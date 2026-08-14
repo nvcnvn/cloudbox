@@ -135,10 +135,12 @@ class BundlesPage:
             + "metadata:\n  name: web-hpa\nspec:\n  minReplicas: 3\n  maxReplicas: 10\n"
         )
 
-    def apply_options(self, app, sandbox, manifests, capacity_mode=None, actor="dev@example.com"):
+    def apply_options(self, app, sandbox, manifests, capacity_mode=None, record_egress=False, actor="dev@example.com"):
         payload = {"app": app, "sandbox": sandbox, "manifests": manifests}
         if capacity_mode:
             payload["capacityMode"] = capacity_mode
+        if record_egress:
+            payload["recordEgress"] = True
         self.last_manifests = manifests
         self.last_response = self._api.post(
             "/v1/apply", json=payload, headers={"X-Cloudbox-User": actor}

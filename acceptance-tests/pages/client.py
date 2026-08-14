@@ -42,10 +42,12 @@ class Cli:
         self._cli = cli_path
         self._base_url = base_url
 
-    def run(self, *args, offline=False):
+    def run(self, *args, offline=False, as_user=None):
         cmd = [self._cli]
         if not offline:
             cmd += ["--server", self._base_url]
+        if as_user:
+            cmd += ["--as", as_user]
         cmd += list(args)
         return CliResult(
             subprocess.run(cmd, capture_output=True, text=True, timeout=60)

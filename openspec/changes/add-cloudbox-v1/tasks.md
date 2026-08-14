@@ -58,9 +58,9 @@ reason, implement until they pass, then commit.
 
 ## 4. L1 ergonomics
 
-- [ ] 4.1 developer-ergonomics: `logs`, `exec`, `port-forward` owner-scoped, audited, seal-preserving — red → green → commit
-- [ ] 4.2 developer-ergonomics: `status --explain` renders blocked egress and emits an allowlist proposal; `apply --record-egress` onboarding loop — red → green → commit
-- [ ] 4.3 developer-ergonomics: evidence-check level needs no promotion verbs — red → green → commit
+- [x] 4.1 developer-ergonomics: `logs`, `exec`, `port-forward` owner-scoped, audited, seal-preserving — red → green → commit
+- [x] 4.2 developer-ergonomics: `status --explain` renders blocked egress and emits an allowlist proposal; `apply --record-egress` onboarding loop — red → green → commit
+- [x] 4.3 developer-ergonomics: evidence-check level needs no promotion verbs — red → green → commit
 
 ## 5. L2 — evidence and the signed check
 

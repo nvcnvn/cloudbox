@@ -54,10 +54,15 @@ def step_impl(context):
 
 @then("the request is denied as not the sandbox owner")
 def step_impl(context):
-    assert context.bundles.last_response.status_code == 403, (
-        context.bundles.last_response.text
-    )
-    assert "owner" in context.bundles.error_message()
+    cli_denial = getattr(context, "cli_denial", None)
+    if cli_denial is not None:
+        assert cli_denial.exit_code != 0, cli_denial.output
+        assert "owner" in cli_denial.output, cli_denial.output
+    else:
+        assert context.bundles.last_response.status_code == 403, (
+            context.bundles.last_response.text
+        )
+        assert "owner" in context.bundles.error_message()
 
 
 # --- S2: thirty-second readiness (task 3.2) ---
