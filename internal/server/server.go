@@ -47,6 +47,20 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /v1/clusters/{cluster}/crds", s.listCRDs)
 	s.mux.HandleFunc("POST /v1/applications", s.createApplication)
 	s.mux.HandleFunc("GET /v1/applications/{app}", s.getApplication)
+	s.mux.HandleFunc("POST /v1/sandboxes", s.createSandbox)
+	s.mux.HandleFunc("GET /v1/sandboxes/{sandbox}", s.getSandbox)
+	s.mux.HandleFunc("GET /v1/sandboxes/{sandbox}/evidence", s.getEvidence)
+	s.mux.HandleFunc("POST /v1/apply", s.apply)
+	s.mux.HandleFunc("GET /v1/bundles/{digest}", s.getBundle)
+}
+
+// actor is the authenticated identity a request acts as. The sim deployment
+// trusts a header the way a real deployment trusts its auth layer.
+func actor(r *http.Request) string {
+	if a := r.Header.Get("X-Cloudbox-User"); a != "" {
+		return a
+	}
+	return "anonymous"
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -64,7 +78,11 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 func writeErr(w http.ResponseWriter, err error) {
 	var ce *core.Error
 	if errors.As(err, &ce) {
-		writeJSON(w, ce.Status, map[string]string{"error": ce.Message})
+		body := map[string]any{"error": ce.Message}
+		if len(ce.Findings) > 0 {
+			body["findings"] = ce.Findings
+		}
+		writeJSON(w, ce.Status, body)
 		return
 	}
 	writeJSON(w, 500, map[string]string{"error": err.Error()})
@@ -183,4 +201,63 @@ func (s *Server) getApplication(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 200, app)
+}
+
+func (s *Server) createSandbox(w http.ResponseWriter, r *http.Request) {
+	req, ok := decode[struct {
+		App string `json:"app"`
+	}](w, r)
+	if !ok {
+		return
+	}
+	sb, err := s.core.CreateSandbox(req.App, actor(r))
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	writeJSON(w, 201, sb)
+}
+
+func (s *Server) getSandbox(w http.ResponseWriter, r *http.Request) {
+	sb, err := s.core.GetSandbox(r.PathValue("sandbox"))
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	writeJSON(w, 200, sb)
+}
+
+func (s *Server) getEvidence(w http.ResponseWriter, r *http.Request) {
+	ev, err := s.core.GetEvidence(r.PathValue("sandbox"))
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	writeJSON(w, 200, ev)
+}
+
+func (s *Server) apply(w http.ResponseWriter, r *http.Request) {
+	req, ok := decode[struct {
+		App       string `json:"app"`
+		Sandbox   string `json:"sandbox"`
+		Manifests string `json:"manifests"`
+	}](w, r)
+	if !ok {
+		return
+	}
+	result, err := s.core.Apply(req.App, req.Sandbox, actor(r), req.Manifests)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	writeJSON(w, 200, result)
+}
+
+func (s *Server) getBundle(w http.ResponseWriter, r *http.Request) {
+	b, err := s.core.GetBundle(r.PathValue("digest"))
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	writeJSON(w, 200, b)
 }

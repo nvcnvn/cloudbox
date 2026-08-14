@@ -48,10 +48,13 @@ type Application struct {
 	Contract  Contract `json:"contract"`
 }
 
-// Error is a user-facing failure with an HTTP-ish status.
+// Error is a user-facing failure with an HTTP-ish status. Intake rejections
+// carry the full finding list so every rejection names the violating manifest
+// and the fix (B3).
 type Error struct {
-	Status  int
-	Message string
+	Status   int
+	Message  string
+	Findings []Finding
 }
 
 func (e *Error) Error() string { return e.Message }
@@ -65,8 +68,12 @@ type Core struct {
 	mu     sync.Mutex
 	driver cluster.Driver
 
-	apps      map[string]*Application
-	installed map[string]bool // clusters where setup ran
+	apps       map[string]*Application
+	installed  map[string]bool // clusters where setup ran
+	bundles    map[string]*Bundle
+	sandboxes  map[string]*Sandbox
+	evidence   map[string]*Evidence // by sandbox name
+	sandboxSeq int
 }
 
 func New(driver cluster.Driver) *Core {
@@ -74,6 +81,9 @@ func New(driver cluster.Driver) *Core {
 		driver:    driver,
 		apps:      map[string]*Application{},
 		installed: map[string]bool{},
+		bundles:   map[string]*Bundle{},
+		sandboxes: map[string]*Sandbox{},
+		evidence:  map[string]*Evidence{},
 	}
 }
 

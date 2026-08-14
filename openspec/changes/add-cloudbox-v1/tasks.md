@@ -21,7 +21,7 @@ reason, implement until they pass, then commit.
 - [x] 2.1 control-plane: five CRDs under one API group, user workloads unwrapped, dependency graph validated — red → green → commit
 - [ ] 2.2 control-plane: server-side enforcement with thin CLI; offline check advisory, server intake authoritative — red → green → commit
 - [ ] 2.3 control-plane: shared-cluster and split-cluster topologies with identical evidence semantics — red → green → commit
-- [ ] 2.4 bundle-intake: apply accepts plain multi-document Kubernetes YAML of any kind — red → green → commit
+- [x] 2.4 bundle-intake: apply accepts plain multi-document Kubernetes YAML of any kind — red → green → commit
 - [ ] 2.5 bundle-intake: every apply produces a content-addressed bundle recorded server-side — red → green → commit
 - [ ] 2.6 bundle-intake: uniform namespace stripped by recorded transform; multi-namespace bundles fail with guidance — red → green → commit
 - [ ] 2.7 bundle-intake: cluster-scoped resources rejected naming manifest and fix — red → green → commit
