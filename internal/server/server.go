@@ -76,10 +76,18 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /v1/containment-statement", s.containment)
 	s.mux.HandleFunc("GET /v1/audit", s.auditLog)
 
-	// The trust boundary stubs: local (user-controlled) sandbox evidence is
-	// non-postable and non-promotable (S3); full check/promotion semantics
-	// are the evidence and promotion capabilities.
+	// Evidence, diff, witnessed tests, merge binding, checks (G2/G7/G13/X4).
+	s.mux.HandleFunc("POST /simctl/production/{app}", s.simSetProduction)
+	s.mux.HandleFunc("GET /v1/applications/{app}/diff/{digest}", s.diff)
+	s.mux.HandleFunc("POST /v1/sandboxes/{sandbox}/test", s.runTests)
+	s.mux.HandleFunc("POST /v1/sandboxes/{sandbox}/test-results", s.assertTestResults)
+	s.mux.HandleFunc("POST /v1/sandboxes/{sandbox}/datastores", s.setDatastore)
+	s.mux.HandleFunc("GET /v1/applications/{app}/prs/{pr}/merge-result", s.mergeResult)
+	s.mux.HandleFunc("GET /v1/scm/prs/{app}/{pr}/checks", s.listChecks)
+	s.mux.HandleFunc("POST /simctl/scm/prs/{app}/{pr}/checks", s.simPipelineCheck)
 	s.mux.HandleFunc("POST /v1/evidence-checks", s.postEvidenceCheck)
+
+	// Promotion stub: full semantics are the promotion capability.
 	s.mux.HandleFunc("POST /v1/promotions", s.openPromotion)
 }
 
@@ -559,6 +567,90 @@ func (s *Server) auditLog(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, 200, map[string]any{"entries": s.core.AuditLog()})
 }
 
+func (s *Server) simSetProduction(w http.ResponseWriter, r *http.Request) {
+	req, ok := decode[struct {
+		Manifests string `json:"manifests"`
+	}](w, r)
+	if !ok {
+		return
+	}
+	if err := s.core.SetProductionState(r.PathValue("app"), req.Manifests); err != nil {
+		writeErr(w, err)
+		return
+	}
+	writeJSON(w, 200, map[string]string{"status": "production state set"})
+}
+
+func (s *Server) diff(w http.ResponseWriter, r *http.Request) {
+	lines, err := s.core.DiffAgainstProduction(r.PathValue("app"), r.PathValue("digest"))
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	writeJSON(w, 200, map[string]any{"diff": lines})
+}
+
+func (s *Server) runTests(w http.ResponseWriter, r *http.Request) {
+	req, ok := decode[struct {
+		Suite string `json:"suite"`
+	}](w, r)
+	if !ok {
+		return
+	}
+	run, err := s.core.RunTests(r.PathValue("sandbox"), req.Suite, actor(r))
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	writeJSON(w, 200, run)
+}
+
+func (s *Server) assertTestResults(w http.ResponseWriter, r *http.Request) {
+	writeErr(w, s.core.AssertTestResults(r.PathValue("sandbox")))
+}
+
+func (s *Server) setDatastore(w http.ResponseWriter, r *http.Request) {
+	req, ok := decode[struct {
+		Name     string `json:"name"`
+		Fidelity string `json:"fidelity"`
+	}](w, r)
+	if !ok {
+		return
+	}
+	if err := s.core.SetDatastoreFidelity(r.PathValue("sandbox"), req.Name, req.Fidelity); err != nil {
+		writeErr(w, err)
+		return
+	}
+	writeJSON(w, 200, map[string]string{"status": "datastore recorded", "fidelity": req.Fidelity})
+}
+
+func (s *Server) mergeResult(w http.ResponseWriter, r *http.Request) {
+	result, err := s.core.MergeResultFor(r.PathValue("app"), r.PathValue("pr"))
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	writeJSON(w, 200, result)
+}
+
+func (s *Server) listChecks(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, 200, map[string]any{
+		"checks": s.core.ChecksFor(r.PathValue("app"), r.PathValue("pr")),
+	})
+}
+
+func (s *Server) simPipelineCheck(w http.ResponseWriter, r *http.Request) {
+	req, ok := decode[struct {
+		Name    string `json:"name"`
+		Summary string `json:"summary"`
+	}](w, r)
+	if !ok {
+		return
+	}
+	check := s.core.SimulatePipelineCheck(r.PathValue("app"), r.PathValue("pr"), req.Name, req.Summary)
+	writeJSON(w, 201, check)
+}
+
 func (s *Server) postEvidenceCheck(w http.ResponseWriter, r *http.Request) {
 	req, ok := decode[struct {
 		Sandbox string `json:"sandbox"`
@@ -567,11 +659,12 @@ func (s *Server) postEvidenceCheck(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if err := s.core.RequireManagedSandbox(req.Sandbox, "post an evidence check"); err != nil {
+	check, err := s.core.PostEvidenceCheck(req.Sandbox, req.PR)
+	if err != nil {
 		writeErr(w, err)
 		return
 	}
-	writeJSON(w, 501, map[string]string{"error": "evidence checks land with the evidence capability"})
+	writeJSON(w, 201, check)
 }
 
 func (s *Server) openPromotion(w http.ResponseWriter, r *http.Request) {

@@ -71,6 +71,11 @@ func (c *Core) HandleSCMEvent(ev SCMEvent) (*Sandbox, error) {
 		if sb == nil {
 			return nil, errf(404, "no sandbox bound to PR %s", ev.PR)
 		}
+		if ev.Type == "merged" && ev.Manifests != "" {
+			// G7: re-render the merge result and bind evidence by digest
+			// before the sandbox goes away.
+			c.bindMergeResult(sb, ev.PR, ev.Manifests)
+		}
 		// TTL fires on PR close or merge (S6).
 		c.destroyLocked(sb)
 		return sb, nil

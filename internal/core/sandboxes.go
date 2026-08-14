@@ -57,11 +57,21 @@ type Sandbox struct {
 	BlockedEgress         []BlockedAttempt `json:"blockedEgress"`
 	Diagnostics           []Diagnostic     `json:"diagnostics"`
 	SuspendedAutoscalers  []string         `json:"suspendedAutoscalers"`
+	// Datastores maps declared datastore names to their provisioned fidelity
+	// level for this run (D2).
+	Datastores map[string]string `json:"datastores,omitempty"`
 }
 
-// sandboxHost picks the cluster new sandboxes land on: a registered sandbox
-// cluster first, else any cluster where setup ran. Callers hold c.mu.
-func (c *Core) sandboxHost() (cluster.Cluster, error) {
+// sandboxHost picks the cluster new sandboxes land on: the application's
+// pinned cluster if set (CP3), else a registered sandbox cluster, else any
+// cluster where setup ran. Callers hold c.mu.
+func (c *Core) sandboxHost(app *Application) (cluster.Cluster, error) {
+	if app != nil && app.SandboxCluster != "" {
+		if cl, ok := c.driver.Cluster(app.SandboxCluster); ok {
+			return cl, nil
+		}
+		return nil, errf(404, "application sandbox cluster %q is not known", app.SandboxCluster)
+	}
 	for name, roles := range c.roles {
 		if roles["sandbox"] {
 			if cl, ok := c.driver.Cluster(name); ok {
@@ -112,7 +122,7 @@ func (c *Core) createSandboxLocked(appName, actor string, opts CreateSandboxOpti
 		host = local
 	} else {
 		var err error
-		host, err = c.sandboxHost()
+		host, err = c.sandboxHost(app)
 		if err != nil {
 			return nil, err
 		}

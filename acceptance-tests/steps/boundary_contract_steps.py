@@ -158,3 +158,47 @@ def step_impl(context):
     record = context.bundles.bundle_record(context.bundles.digest())
     record.raise_for_status()
     assert record.json()["manifests"] == context.manifests
+
+
+# --- S8 v1: stubs recorded honestly (task 2.16) ---
+
+
+@given('an application declaring a dependency on the billing application via the alias "billing.deps.internal"')
+def step_impl(context):
+    context.applications.create("billing")
+    context.stub_contract = {
+        "secretNames": [], "ingressHostnames": [],
+        "egressAllowlist": ["mock-billing.dev.example.com"],
+        "dependencies": [{
+            "app": "billing", "alias": "billing.deps.internal",
+            "stubEndpoint": "mock-billing.dev.example.com",
+        }],
+    }
+
+
+@given("the alias is mapped to a user-supplied mock endpoint on the allowlist")
+def step_impl(context):
+    dep = context.stub_contract["dependencies"][0]
+    assert dep["stubEndpoint"] in context.stub_contract["egressAllowlist"]
+    context.app_name = context.applications.create("web", contract=context.stub_contract)["name"]
+
+
+@when("a sealed run completes and its evidence is assembled")
+def step_impl(context):
+    context.sandbox_name = context.sandboxes.create(context.app_name)
+    context.bundles.apply(context.app_name, context.sandbox_name, context.bundles.plain_mixed_manifests())
+    context.bundles.last_response.raise_for_status()
+    context.evidence = context.sandboxes.evidence(context.sandbox_name)
+
+
+@then("the dependency status is recorded as stubbed")
+def step_impl(context):
+    assert context.evidence["dependencies"] == [{"app": "billing", "status": "stubbed"}], (
+        context.evidence["dependencies"]
+    )
+
+
+@then("the evidence nowhere presents the dependency as parity-verified")
+def step_impl(context):
+    blob = str(context.evidence).lower()
+    assert "parity" not in blob and "prod-match: true" not in blob, blob

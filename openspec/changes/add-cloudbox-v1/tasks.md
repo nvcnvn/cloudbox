@@ -20,7 +20,7 @@ reason, implement until they pass, then commit.
 
 - [x] 2.1 control-plane: five CRDs under one API group, user workloads unwrapped, dependency graph validated — red → green → commit
 - [x] 2.2 control-plane: server-side enforcement with thin CLI; offline check advisory, server intake authoritative — red → green → commit
-- [ ] 2.3 control-plane: shared-cluster and split-cluster topologies with identical evidence semantics — red → green → commit
+- [x] 2.3 control-plane: shared-cluster and split-cluster topologies with identical evidence semantics — red → green → commit
 - [x] 2.4 bundle-intake: apply accepts plain multi-document Kubernetes YAML of any kind — red → green → commit
 - [x] 2.5 bundle-intake: every apply produces a content-addressed bundle recorded server-side — red → green → commit
 - [x] 2.6 bundle-intake: uniform namespace stripped by recorded transform; multi-namespace bundles fail with guidance — red → green → commit
@@ -33,7 +33,7 @@ reason, implement until they pass, then commit.
 - [x] 2.13 boundary-contract: contract limited to the four declared kinds — red → green → commit
 - [x] 2.14 boundary-contract: apply fails on undeclared or unvalued secrets — red → green → commit
 - [x] 2.15 boundary-contract: no variance mechanism outside the contract; namespace/capacity are recorded transforms — red → green → commit
-- [ ] 2.16 boundary-contract: declared dependencies satisfiable by stubs, recorded as stubbed — red → green → commit
+- [x] 2.16 boundary-contract: declared dependencies satisfiable by stubs, recorded as stubbed — red → green → commit
 
 ## 3. L1 core — sandbox lifecycle, seal, substrate parity
 
@@ -64,13 +64,13 @@ reason, implement until they pass, then commit.
 
 ## 5. L2 — evidence and the signed check
 
-- [ ] 5.1 evidence: normalized diff against production — red → green → commit
-- [ ] 5.2 evidence: evidence carries the full machine-gathered record — red → green → commit
-- [ ] 5.3 evidence: honest scoped wording, idle vs exercised, declared-not-verified labels — red → green → commit
-- [ ] 5.4 evidence: PR binding — digest-match transfer with soak, staleness on mismatch — red → green → commit
-- [ ] 5.5 evidence: witnessed in-sandbox `test` runs attributed and signed; CI can trigger, never assert — red → green → commit
-- [ ] 5.6 evidence: signed evidence check minted only by the control plane with the five validity conditions — red → green → commit
-- [ ] 5.7 control-plane: CI untrusted — pipeline-forged checks impossible (ADR 0004) — red → green → commit
+- [x] 5.1 evidence: normalized diff against production — red → green → commit
+- [x] 5.2 evidence: evidence carries the full machine-gathered record — red → green → commit
+- [x] 5.3 evidence: honest scoped wording, idle vs exercised, declared-not-verified labels — red → green → commit
+- [x] 5.4 evidence: PR binding — digest-match transfer with soak, staleness on mismatch — red → green → commit
+- [x] 5.5 evidence: witnessed in-sandbox `test` runs attributed and signed; CI can trigger, never assert — red → green → commit
+- [x] 5.6 evidence: signed evidence check minted only by the control plane with the five validity conditions — red → green → commit
+- [x] 5.7 control-plane: CI untrusted — pipeline-forged checks impossible (ADR 0004) — red → green → commit
 
 ## 6. L3 — promotion
 

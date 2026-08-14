@@ -120,3 +120,96 @@ def step_impl(context):
     )
     findings = context.bundles.findings()
     assert any(f["code"] == "undeclared-secret" for f in findings), findings
+
+
+# --- CP3: shared vs split topologies (task 2.3) ---
+
+
+@given("one application running sandboxes on the production cluster and another using a separate registered sandbox cluster")
+def step_impl(context):
+    from steps.substrate_parity_steps import BASE_COMPONENTS
+
+    for name in ("prod-cluster", "sbx-cluster"):
+        context.platform.ensure_cluster(name)
+        context.platform.run_setup(name).raise_for_status()
+        context.platform.set_components(name, BASE_COMPONENTS)
+    context.platform.register_cluster("prod-cluster", "production")
+    context.platform.register_cluster("sbx-cluster", "sandbox")
+    context.applications.create("shared-app", sandboxCluster="prod-cluster")
+    context.applications.create("split-app", sandboxCluster="sbx-cluster")
+
+
+@when("both produce evidence for equivalent runs")
+def step_impl(context):
+    context.topology_evidence = {}
+    for app in ("shared-app", "split-app"):
+        sandbox = context.sandboxes.create(app, arrange=False)
+        context.bundles.apply(app, sandbox, context.bundles.plain_mixed_manifests())
+        context.bundles.last_response.raise_for_status()
+        record = context.sandboxes.record(sandbox).json()
+        context.topology_evidence[app] = (record, context.sandboxes.evidence(sandbox))
+    shared_record, _ = context.topology_evidence["shared-app"]
+    split_record, _ = context.topology_evidence["split-app"]
+    assert shared_record["cluster"] == "prod-cluster" and split_record["cluster"] == "sbx-cluster"
+
+
+@then("the evidence carries the same facts with the same validity rules in both topologies")
+def step_impl(context):
+    _, shared = context.topology_evidence["shared-app"]
+    _, split = context.topology_evidence["split-app"]
+    assert set(shared.keys()) == set(split.keys()), (
+        "evidence fact sets differ between topologies"
+    )
+    for field in ("sealStatus", "valid", "substrateMatch", "capacityMode", "egressViolations"):
+        assert shared[field] == split[field], (field, shared[field], split[field])
+    assert shared["substrateDigest"] == split["substrateDigest"], (
+        "same components must yield the same app-scoped substrate digest"
+    )
+
+
+# --- CP4: pipeline-forged checks impossible (task 5.7) ---
+
+
+@given("a CI pipeline holding no control-plane signing capability")
+def step_impl(context):
+    context.app_name = context.applications.create("web")["name"]
+    context.pr = "13"
+    context.sandbox_name = context.sandboxes.create(context.app_name)
+    context.bundles.apply(context.app_name, context.sandbox_name, context.bundles.plain_mixed_manifests())
+    context.bundles.last_response.raise_for_status()
+
+
+@when("the pipeline attempts to post an evidence status check to a pull request")
+def step_impl(context):
+    context.api.post(
+        "/simctl/scm/prs/%s/%s/checks" % (context.app_name, context.pr),
+        json={"name": "cloudbox/evidence", "summary": "forged: everything passed"},
+    ).raise_for_status()
+
+
+@then("the posted check is not the product's signed evidence check")
+def step_impl(context):
+    checks = context.api.get(
+        "/v1/scm/prs/%s/%s/checks" % (context.app_name, context.pr)
+    ).json()["checks"]
+    forged = [c for c in checks if c["postedBy"] == "ci-pipeline"]
+    assert forged, checks
+    assert not forged[0].get("signature"), (
+        "a pipeline post must carry no product signature: %s" % forged[0]
+    )
+
+
+@then("the product's check appears only when the controller posts it through the SCM integration")
+def step_impl(context):
+    checks = context.api.get(
+        "/v1/scm/prs/%s/%s/checks" % (context.app_name, context.pr)
+    ).json()["checks"]
+    assert not [c for c in checks if c.get("signature")], "no signed check should exist yet"
+    context.api.post(
+        "/v1/evidence-checks", json={"sandbox": context.sandbox_name, "pr": context.pr}
+    ).raise_for_status()
+    checks = context.api.get(
+        "/v1/scm/prs/%s/%s/checks" % (context.app_name, context.pr)
+    ).json()["checks"]
+    signed = [c for c in checks if c.get("signature", "").startswith("signed:controller:")]
+    assert len(signed) == 1 and signed[0]["postedBy"] == "cloudbox-controller", checks

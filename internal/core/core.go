@@ -34,13 +34,16 @@ type Contract struct {
 }
 
 // Dependency is an internal application dependency (C1): a target Application
-// plus the alias hostname bundles use to reach it.
+// plus the alias hostname bundles use to reach it. In v1 a dependency may be
+// satisfied by an allowlisted stub endpoint, recorded as stubbed in evidence
+// (S8 v1 alternative).
 type Dependency struct {
-	App   string `json:"app"`
-	Alias string `json:"alias,omitempty"`
+	App          string `json:"app"`
+	Alias        string `json:"alias,omitempty"`
+	StubEndpoint string `json:"stubEndpoint,omitempty"`
 }
 
-// Policies are per-application operational policy (S5, S7, and later G4/D3).
+// Policies are per-application operational policy (S5, S7, G4, D3, X4).
 type Policies struct {
 	// CPUQuotaPerSandbox caps total CPU requests (in cores) a sandbox may
 	// schedule after transforms; 0 means unlimited (S5).
@@ -48,17 +51,35 @@ type Policies struct {
 	// IdleExpirySeconds destroys a sandbox with no activity for this long;
 	// 0 disables idle expiry (S5).
 	IdleExpirySeconds int64 `json:"idleExpirySeconds,omitempty"`
+	// MinFidelity is the minimum data fidelity for valid evidence (D3).
+	MinFidelity string `json:"minFidelity,omitempty"`
+	// MinFidelityForMigrations conditionally raises the floor when a bundle
+	// contains a migration (D3).
+	MinFidelityForMigrations string `json:"minFidelityForMigrations,omitempty"`
+	// MinWitnessedEvents is the witnessed-activity floor for a valid evidence
+	// check (X4/G13).
+	MinWitnessedEvents int `json:"minWitnessedEvents,omitempty"`
+}
+
+// TestSuite is the application's declared suite the test command runs (X4).
+type TestSuite struct {
+	Name  string `json:"name"`
+	Tests int    `json:"tests"`
 }
 
 // Application is the policy boundary (§5).
 type Application struct {
-	Name           string   `json:"name"`
-	Owners         []string `json:"owners"`
-	Approvers      []string `json:"approvers"`
-	Level          string   `json:"level"` // L1..L4
-	Contract       Contract `json:"contract"`
-	Policies       Policies `json:"policies"`
-	SCMIntegration bool     `json:"scmIntegration"` // enables PR-bound sandboxes (S6)
+	Name           string     `json:"name"`
+	Owners         []string   `json:"owners"`
+	Approvers      []string   `json:"approvers"`
+	Level          string     `json:"level"` // L1..L4
+	Contract       Contract   `json:"contract"`
+	Policies       Policies   `json:"policies"`
+	SCMIntegration bool       `json:"scmIntegration"` // enables PR-bound sandboxes (S6)
+	TestSuite      *TestSuite `json:"testSuite,omitempty"`
+	// SandboxCluster optionally pins this application's sandboxes to one
+	// registered cluster (CP3 topologies).
+	SandboxCluster string `json:"sandboxCluster,omitempty"`
 }
 
 // Error is a user-facing failure with an HTTP-ish status. Intake rejections
@@ -93,6 +114,9 @@ type Core struct {
 	// secretValues records presence only, by app → environment → secret name:
 	// the values themselves are write-only and never stored (C1).
 	secretValues map[string]map[string]map[string]bool
+	production   map[string]*ProductionState // what the team's CD runs (G2)
+	mergeResults map[string]*MergeResult     // app/pr → merge-time binding (G7)
+	prChecks     map[string][]PRCheck        // app/pr → posted status checks (G13/CP4)
 	audit        []AuditEntry
 	sandboxSeq   int
 	holdSeal     bool // sim arrangement: leave the next sandbox provisioning (N1)
@@ -118,6 +142,9 @@ func New(driver cluster.Driver, now func() time.Time) *Core {
 		sandboxes:    map[string]*Sandbox{},
 		evidence:     map[string]*Evidence{},
 		secretValues: map[string]map[string]map[string]bool{},
+		production:   map[string]*ProductionState{},
+		mergeResults: map[string]*MergeResult{},
+		prChecks:     map[string][]PRCheck{},
 	}
 }
 
