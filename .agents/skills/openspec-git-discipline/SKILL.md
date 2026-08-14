@@ -19,22 +19,33 @@ Never create commits, branches, or merges unless the user explicitly asks.
 
 ## Gates
 
-| Moment | Gate |
-| --- | --- |
-| Before propose | Prefer `main`; if not, warn and ask whether to continue intentionally. |
-| During continue | Before creating the next artifact, ask the user to commit completed artifact changes or explicitly continue without that checkpoint. |
-| After propose | Ask the user to commit proposal artifacts; offer to create a PR branch for review. |
-| Before apply | Confirm the proposal change is committed on `main`; then apply may run from `main`, a branch, or a worktree. |
-| Before archive | Stop unless implementation is merged back to `main` and archive is running from `main`. |
-| After archive | Ask the user to commit archive/spec sync changes. |
+Two moments block. The rest are advisory: say the thing in the same response and keep
+going. Never turn an advisory gate into a question that waits for an answer.
+
+| Moment | Kind | Gate |
+| --- | --- | --- |
+| Before propose | Advisory | If not on `main`, say so in one line and continue. |
+| During continue | Advisory | If the previous artifact is uncommitted, say so while creating the next one. |
+| After propose | Advisory | State that proposal artifacts are uncommitted; offer a PR branch without waiting. |
+| Before apply | **Blocking** | Stop unless the proposal change is committed on `main`. Then apply may run from `main`, a branch, or a worktree. |
+| Before archive | **Blocking** | Stop unless implementation is merged back to `main` and archive is running from `main`. |
+| After archive | Advisory | State that archive/spec sync changes are uncommitted. |
+
+Only the two blocking gates protect correctness — applying or archiving against git
+state that does not exist yet produces work that silently disappears. The advisory
+moments protect tidiness, and a stop costs a full round trip, so they do not stop.
 
 ## Required Checks
 
+Run these only at the two blocking gates. Advisory moments use git state you already
+have — they never justify a fresh command.
+
 Before apply:
 
-1. Run `git status --short`.
-2. Verify `openspec/changes/<change>/` has no uncommitted proposal files.
-3. Verify the proposal change exists on `main` before applying from any branch/worktree.
+1. Run `git status --short` and confirm `openspec/changes/<change>/` has no uncommitted
+   proposal files.
+2. Run `git ls-tree main --name-only -- openspec/changes/<change>`. Empty output means
+   the proposal has not reached `main`. Do not improvise other commands for this.
 
 Use this language if the proposal has not reached `main`:
 
@@ -52,10 +63,15 @@ Use this language:
 
 ## Red Flags
 
+Stop, explain the boundary, and ask the user to make the git state explicit:
+
 - Applying a proposal that exists only on the current branch/worktree.
 - Treating worktree visibility as proof that the proposal reached `main`.
-- Creating the next continue artifact without asking about committing the previous one.
 - Archiving from a feature branch or before implementation is merged to `main`.
 - Auto-committing, branching, or merging without explicit user approval.
 
-All of these mean: pause, explain the boundary, and ask the user to make the git state explicit.
+Say it and keep working — these are not stops:
+
+- Uncommitted artifacts from a previous continue step.
+- Proposing from a branch other than `main`.
+- Uncommitted archive or spec sync output.

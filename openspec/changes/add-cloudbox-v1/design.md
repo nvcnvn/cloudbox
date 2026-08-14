@@ -201,3 +201,11 @@ migration; below L4 the product can be removed without touching production.
 8. Confirm the SHOULD-as-MUST carries (Decision 9: P3 provisioning, D7 thin
    clones) with the product owner; if either is descoped, the corresponding
    delta spec Rule must be revised before implementation.
+9. Kube-driver conformance — **resolved**: every v1 contract here is verified
+   only against the sim driver (ADR 0007), and `--driver kube` is
+   unimplemented. That gap is not descoped, it is sequenced: the `kube` driver
+   and a tagged cluster-effect conformance run on Kind + an enforcing CNI are
+   tracked by the `add-kube-driver-conformance` change. The managed-offering
+   half of the Risks conformance matrix (EKS/GKE/AKS) stays post-v1 and does
+   not gate v1 GA; sim-verified contracts plus the N7 probe (which refuses to
+   report sealed on a non-enforcing CNI) carry v1.
