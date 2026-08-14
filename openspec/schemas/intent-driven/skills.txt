@@ -1,0 +1,8 @@
+acceptance-test-authoring
+architectural-decision-records
+bdd-zone-check
+c4-diagrams
+gherkin-authoring
+glossary
+grill-me
+openspec-git-discipline

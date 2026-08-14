@@ -1,0 +1,42 @@
+schema: intent-driven
+
+# Acceptance-test harness stack (required by the intent-driven schema).
+# Supported: javascript (cucumber-js) | python (behave).
+# This is the language of the acceptance-tests/ harness, not the application.
+stack: python
+
+# Project context (optional)
+# This is shown to AI when creating artifacts.
+# Add your tech stack, conventions, style guides, domain knowledge, etc.
+# Example:
+#   context: |
+#     Tech stack: TypeScript, React, Node.js
+#     We use conventional commits
+#     Domain: e-commerce platform
+
+# Per-artifact rules (optional)
+# Keys must match the intent-driven schema's artifact IDs:
+# proposal, specs, design, adr, tasks
+# Example:
+#   rules:
+#     proposal:
+#       - Keep proposals under 500 words
+#       - Always include a "Non-goals" section
+#     specs:
+#       - One capability per spec.md
+#     design:
+#       - Account for all in-force ADRs under adr/
+#     adr:
+#       - Use the MADR template for durable ADRs
+#     tasks:
+#       - Break tasks into chunks of max 2 hours
+
+# Per-operation guidance (optional)
+# Example:
+#   operations:
+#     apply:
+#       guidance:
+#         - Keep test summaries concise
+#     archive:
+#       guidance:
+#         - Summarize the archive outcome before finishing
