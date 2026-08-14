@@ -1,0 +1,10 @@
+# Local working draft — spec artifacts under openspec/ are the source of truth
+draft.md
+
+# Acceptance-test generated artifacts
+acceptance-tests/.extracted/
+acceptance-tests/reports/
+acceptance-tests/.venv/
+
+# Build output
+/bin/
