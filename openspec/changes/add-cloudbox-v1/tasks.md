@@ -87,13 +87,13 @@ reason, implement until they pass, then commit.
 
 ## 8. Data fidelity
 
-- [ ] 8.1 data-fidelity: content-addressed data profile lockfiles; values never leave production — red → green → commit
-- [ ] 8.2 data-fidelity: per-datastore fidelity declared in every run's evidence — red → green → commit
-- [ ] 8.3 data-fidelity: policy minimums with conditional rules; below-minimum evidence invalid — red → green → commit
-- [ ] 8.4 data-fidelity: migration replay from the profile schema with surfaced failures — red → green → commit
-- [ ] 8.5 data-fidelity: profile drift stales evidence at its declared level — red → green → commit
-- [ ] 8.6 data-fidelity: thin-clone drivers deliver live-clone through the boundary contract — red → green → commit
-- [ ] 8.7 data-fidelity: real-data levels admin-enabled and agent-gated — red → green → commit
+- [x] 8.1 data-fidelity: content-addressed data profile lockfiles; values never leave production — red → green → commit
+- [x] 8.2 data-fidelity: per-datastore fidelity declared in every run's evidence — red → green → commit
+- [x] 8.3 data-fidelity: policy minimums with conditional rules; below-minimum evidence invalid — red → green → commit
+- [x] 8.4 data-fidelity: migration replay from the profile schema with surfaced failures — red → green → commit
+- [x] 8.5 data-fidelity: profile drift stales evidence at its declared level — red → green → commit
+- [x] 8.6 data-fidelity: thin-clone drivers deliver live-clone through the boundary contract — red → green → commit
+- [x] 8.7 data-fidelity: real-data levels admin-enabled and agent-gated — red → green → commit
 
 ## 9. Completion
 

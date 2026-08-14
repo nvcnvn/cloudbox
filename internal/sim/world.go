@@ -21,13 +21,16 @@ type World struct {
 	// oomUnderSqueeze names workloads that cannot survive the squeezed
 	// capacity transform (arranged by the suite to model memory-tight apps).
 	oomUnderSqueeze map[string]bool
+	// failingMigrations names migration Jobs whose chain fails (D4).
+	failingMigrations map[string]bool
 }
 
 func NewWorld() *World {
 	return &World{
-		clusters:        map[string]*SimCluster{},
-		now:             time.Now(),
-		oomUnderSqueeze: map[string]bool{},
+		clusters:          map[string]*SimCluster{},
+		now:               time.Now(),
+		oomUnderSqueeze:   map[string]bool{},
+		failingMigrations: map[string]bool{},
 	}
 }
 
@@ -94,6 +97,21 @@ func (w *World) OOMsUnderSqueeze(workload string) bool {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	return w.oomUnderSqueeze[workload]
+}
+
+// MarkMigrationFailing arranges that a migration Job of this name fails when
+// its chain runs (D4).
+func (w *World) MarkMigrationFailing(workload string) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.failingMigrations[workload] = true
+}
+
+// FailsMigration reports the arrangement to the control plane.
+func (w *World) FailsMigration(workload string) bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.failingMigrations[workload]
 }
 
 type simNamespace struct {

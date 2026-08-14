@@ -60,6 +60,16 @@ type Sandbox struct {
 	// Datastores maps declared datastore names to their provisioned fidelity
 	// level for this run (D2).
 	Datastores map[string]string `json:"datastores,omitempty"`
+	// ProfileDigests pins the data profile each shape-claiming datastore was
+	// provisioned from, so drift can stale it (D5).
+	ProfileDigests map[string]string `json:"profileDigests,omitempty"`
+	// CloneEndpoints/CloneSecrets are per-sandbox thin-clone wiring through
+	// the boundary contract (D7).
+	CloneEndpoints map[string]string `json:"cloneEndpoints,omitempty"`
+	CloneSecrets   map[string]string `json:"cloneSecrets,omitempty"`
+	// AgentOwned marks sandboxes owned by AI agents; real-data levels need
+	// explicit policy for them (D8).
+	AgentOwned bool `json:"agentOwned,omitempty"`
 }
 
 // sandboxHost picks the cluster new sandboxes land on: the application's
@@ -92,6 +102,7 @@ type CreateSandboxOptions struct {
 	Local      bool
 	TTLSeconds int64
 	PR         string
+	Agent      bool
 }
 
 // CreateSandbox provisions a sealed sandbox in one no-approval step (S1/S2).
@@ -140,6 +151,7 @@ func (c *Core) createSandboxLocked(appName, actor string, opts CreateSandboxOpti
 		LastActivity: start,
 		TTLSeconds:   opts.TTLSeconds,
 		PullRequest:  opts.PR,
+		AgentOwned:   opts.Agent,
 		CapacityMode: "squeezed",
 		BlockedEgress:        []BlockedAttempt{},
 		Diagnostics:          []Diagnostic{},

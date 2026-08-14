@@ -88,6 +88,12 @@ type Application struct {
 	// BreakGlassRole names the emergency identities allowed break-glass
 	// access in strict mode (G12); strict mode refuses setup without one.
 	BreakGlassRole []string `json:"breakGlassRole,omitempty"`
+	// Datastores the application declares (D1).
+	Datastores []DeclaredDatastore `json:"datastores,omitempty"`
+	// RealDataEnabled/RealDataForAgents gate masked-snapshot and live-clone:
+	// admin-enabled per application, never default (D8).
+	RealDataEnabled   bool `json:"realDataEnabled,omitempty"`
+	RealDataForAgents bool `json:"realDataForAgents,omitempty"`
 }
 
 // Error is a user-facing failure with an HTTP-ish status. Intake rejections
@@ -131,6 +137,8 @@ type Core struct {
 	promoted     map[string]*PromotedState      // app → live promoted state (G12)
 	breakGlass   map[string]map[string]time.Time // app → actor → expiry (G12)
 	failNextSync map[string]bool
+	databases    map[string]*SimDatabase // app/ds → production database (sim)
+	profiles     map[string]*DataProfile // app/ds → data profile lockfile (D1)
 	audit          []AuditEntry
 	auditAvailable bool
 	promotionSeq   int
@@ -167,6 +175,8 @@ func New(driver cluster.Driver, now func() time.Time) *Core {
 		promoted:     map[string]*PromotedState{},
 		breakGlass:   map[string]map[string]time.Time{},
 		failNextSync: map[string]bool{},
+		databases:    map[string]*SimDatabase{},
+		profiles:     map[string]*DataProfile{},
 		auditAvailable: true,
 	}
 }

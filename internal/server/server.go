@@ -100,6 +100,12 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /simctl/gitops/{app}/sync", s.simGitOpsSync)
 	s.mux.HandleFunc("POST /simctl/gitops/{app}/fail-next-sync", s.simFailNextSync)
 	s.mux.HandleFunc("POST /simctl/audit-sink", s.simAuditSink)
+
+	// Data fidelity (D1–D8).
+	s.mux.HandleFunc("POST /simctl/databases/{app}/{datastore}", s.simSeedDatabase)
+	s.mux.HandleFunc("POST /simctl/fail-migration", s.simFailMigration)
+	s.mux.HandleFunc("POST /v1/applications/{app}/datastores/{datastore}/profile", s.profileDatastore)
+	s.mux.HandleFunc("PUT /v1/applications/{app}/real-data", s.enableRealData)
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -397,13 +403,14 @@ func (s *Server) createSandbox(w http.ResponseWriter, r *http.Request) {
 	req, ok := decode[struct {
 		App        string `json:"app"`
 		Local      bool   `json:"local"`
+		Agent      bool   `json:"agent"`
 		TTLSeconds int64  `json:"ttlSeconds"`
 	}](w, r)
 	if !ok {
 		return
 	}
 	sb, err := s.core.CreateSandbox(req.App, actor(r), core.CreateSandboxOptions{
-		Local: req.Local, TTLSeconds: req.TTLSeconds,
+		Local: req.Local, TTLSeconds: req.TTLSeconds, Agent: req.Agent,
 	})
 	if err != nil {
 		writeErr(w, err)
@@ -628,11 +635,58 @@ func (s *Server) setDatastore(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if err := s.core.SetDatastoreFidelity(r.PathValue("sandbox"), req.Name, req.Fidelity); err != nil {
+	result, err := s.core.ProvisionDatastore(r.PathValue("sandbox"), req.Name, req.Fidelity)
+	if err != nil {
 		writeErr(w, err)
 		return
 	}
-	writeJSON(w, 200, map[string]string{"status": "datastore recorded", "fidelity": req.Fidelity})
+	writeJSON(w, 200, result)
+}
+
+func (s *Server) simSeedDatabase(w http.ResponseWriter, r *http.Request) {
+	db, ok := decode[core.SimDatabase](w, r)
+	if !ok {
+		return
+	}
+	if err := s.core.SeedDatabase(r.PathValue("app"), r.PathValue("datastore"), db); err != nil {
+		writeErr(w, err)
+		return
+	}
+	writeJSON(w, 200, map[string]string{"status": "database seeded"})
+}
+
+func (s *Server) simFailMigration(w http.ResponseWriter, r *http.Request) {
+	req, ok := decode[struct {
+		Workload string `json:"workload"`
+	}](w, r)
+	if !ok {
+		return
+	}
+	s.world.MarkMigrationFailing(req.Workload)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) profileDatastore(w http.ResponseWriter, r *http.Request) {
+	profile, err := s.core.ProfileDatastore(r.PathValue("app"), r.PathValue("datastore"))
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	writeJSON(w, 200, profile)
+}
+
+func (s *Server) enableRealData(w http.ResponseWriter, r *http.Request) {
+	req, ok := decode[struct {
+		ForAgents bool `json:"forAgents"`
+	}](w, r)
+	if !ok {
+		return
+	}
+	if err := s.core.EnableRealData(r.PathValue("app"), actor(r), req.ForAgents); err != nil {
+		writeErr(w, err)
+		return
+	}
+	writeJSON(w, 200, map[string]string{"status": "real-data levels enabled"})
 }
 
 func (s *Server) mergeResult(w http.ResponseWriter, r *http.Request) {

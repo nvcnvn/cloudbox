@@ -128,8 +128,8 @@ func (c *Core) PostEvidenceCheck(sandboxName, pr string) (*PRCheck, error) {
 	if !ev.SubstrateMatch {
 		failures = append(failures, "substrate does not match production")
 	}
-	if app != nil && app.Policies.MinFidelity != "" && fidelityBelow(ev.Fidelity, app.Policies.MinFidelity) {
-		failures = append(failures, fmt.Sprintf("fidelity below the policy minimum %q", app.Policies.MinFidelity))
+	if min := c.applicableMinFidelity(app, ev.BundleDigest); min != "" && fidelityBelow(ev.Fidelity, min) {
+		failures = append(failures, fmt.Sprintf("fidelity below the policy minimum %q", min))
 	}
 	if app != nil && ev.Witnessed.Events < app.Policies.MinWitnessedEvents {
 		failures = append(failures, fmt.Sprintf(

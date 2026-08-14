@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"strings"
 	"time"
 
 	"cloudbox/internal/cluster"
@@ -178,6 +179,7 @@ func (c *Core) Apply(appName, sandboxName, actor, manifestYAML string, opts Appl
 	sb.Diagnostics = nil
 
 	// Admit workloads into the sealed namespace.
+	var migrationFailures []string
 	if hostKnown {
 		for _, obj := range admitted {
 			if !isWorkloadKind(obj.Kind) {
@@ -197,6 +199,16 @@ func (c *Core) Apply(appName, sandboxName, actor, manifestYAML string, opts Appl
 						obj.Name, mode),
 				})
 			}
+			if isMigrationJob(obj) && c.migrationArranger() != nil && c.migrationArranger()(obj.Name) {
+				// D4: the migration chain ran against the profile-schema
+				// datastore and failed — surfaced in status and evidence.
+				w.Ready = false
+				failure := fmt.Sprintf("migration %q failed against the datastore instantiated from the profile schema", obj.Name)
+				migrationFailures = append(migrationFailures, failure)
+				sb.Diagnostics = append(sb.Diagnostics, Diagnostic{
+					Code: "migration-failed", Workload: obj.Name, Message: failure,
+				})
+			}
 			host.AddWorkload(sb.Namespace, w)
 		}
 	}
@@ -207,6 +219,7 @@ func (c *Core) Apply(appName, sandboxName, actor, manifestYAML string, opts Appl
 	ev.Transforms = append([]Transform{}, analysis.Transforms...)
 	ev.CapacityMode = mode
 	ev.AutoscalersSuspended = suspended
+	ev.MigrationFailures = migrationFailures
 	ev.SubstrateDigest = c.sandboxSubstrateDigest(sb)
 
 	return &ApplyResult{
@@ -222,6 +235,36 @@ func isWorkloadKind(kind string) bool {
 		return true
 	}
 	return false
+}
+
+// isMigrationJob spots schema-migration workloads: a Job whose name says so
+// (the v1 heuristic behind D3's conditional fidelity rules).
+func isMigrationJob(obj cluster.Object) bool {
+	return obj.Kind == "Job" && strings.Contains(obj.Name, "migrat")
+}
+
+// bundleHasMigration reports whether a recorded bundle contains a migration.
+// Callers hold c.mu.
+func (c *Core) bundleHasMigration(digest string) bool {
+	b, ok := c.bundles[digest]
+	if !ok {
+		return false
+	}
+	for _, obj := range b.Objects {
+		if isMigrationJob(obj) {
+			return true
+		}
+	}
+	return false
+}
+
+// migrationArranger exposes the sim world's migration-failure arrangement.
+// Callers hold c.mu.
+func (c *Core) migrationArranger() func(string) bool {
+	if w, ok := c.driver.(interface{ FailsMigration(string) bool }); ok {
+		return w.FailsMigration
+	}
+	return nil
 }
 
 // oomArranger exposes the sim world's OOM arrangement when the driver is the

@@ -44,6 +44,9 @@ type Evidence struct {
 
 	ObservedHealthySeconds float64 `json:"observedHealthySeconds"`
 
+	// MigrationFailures surfaces failed migration replays (D4).
+	MigrationFailures []string `json:"migrationFailures,omitempty"`
+
 	Summary   string `json:"summary"`   // G6 wording, rendered in one place
 	Signature string `json:"signature"` // minted by the control plane only (CP4)
 
@@ -140,18 +143,40 @@ func (c *Core) snapshotEvidence(sb *Sandbox) *Evidence {
 				"substrate mismatch: sandbox substrate digest does not match production's")
 		}
 	}
-	if app != nil {
-		if min := app.Policies.MinFidelity; min != "" && fidelityBelow(ev.Fidelity, min) {
-			// D3: evidence below the applicable minimum is invalid.
+	if min := c.applicableMinFidelity(app, ev.BundleDigest); min != "" && fidelityBelow(ev.Fidelity, min) {
+		// D3: evidence below the applicable minimum is invalid.
+		ev.Valid = false
+		ev.InvalidReasons = append(ev.InvalidReasons,
+			fmt.Sprintf("fidelity below the applicable minimum %q", min))
+	}
+	// D5: profile drift stales evidence at its declared fidelity level.
+	for ds, pinned := range sb.ProfileDigests {
+		if current, ok := c.profiles[dsKey(sb.App, ds)]; ok && current.Digest != pinned {
 			ev.Valid = false
-			ev.InvalidReasons = append(ev.InvalidReasons,
-				fmt.Sprintf("fidelity below the policy minimum %q", min))
+			ev.InvalidReasons = append(ev.InvalidReasons, fmt.Sprintf(
+				"data profile drift: datastore %q moved from the profile this sandbox was provisioned from; evidence is no longer valid at declared level %q",
+				ds, sb.Datastores[ds]))
 		}
 	}
 
 	ev.Summary = renderSummary(ev)
 	ev.Signature = signEvidence(ev)
 	return ev
+}
+
+// applicableMinFidelity resolves D3's policy: the base minimum, raised by the
+// conditional rule when the bundle contains a migration. Callers hold c.mu.
+func (c *Core) applicableMinFidelity(app *Application, bundleDigest string) string {
+	if app == nil {
+		return ""
+	}
+	min := app.Policies.MinFidelity
+	if cond := app.Policies.MinFidelityForMigrations; cond != "" && c.bundleHasMigration(bundleDigest) {
+		if fidelityRank[cond] > fidelityRank[min] {
+			min = cond
+		}
+	}
+	return min
 }
 
 // fidelityRank orders the five levels (D2).
@@ -273,22 +298,3 @@ func (c *Core) OverrideSubstrateMismatch(sandboxName, admin, reason string) erro
 	return nil
 }
 
-// SetDatastoreFidelity records the provisioned fidelity level of one declared
-// datastore in a sandbox (D2; provisioning mechanics are the data-fidelity
-// capability).
-func (c *Core) SetDatastoreFidelity(sandboxName, datastore, level string) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	sb, ok := c.sandboxes[sandboxName]
-	if !ok {
-		return errf(404, "sandbox %q is not known", sandboxName)
-	}
-	if _, ok := fidelityRank[level]; !ok {
-		return errf(422, "unknown fidelity level %q", level)
-	}
-	if sb.Datastores == nil {
-		sb.Datastores = map[string]string{}
-	}
-	sb.Datastores[datastore] = level
-	return nil
-}
