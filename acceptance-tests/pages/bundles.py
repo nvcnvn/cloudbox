@@ -53,6 +53,57 @@ class BundlesPage:
         )
         return PLAIN_MIXED_YAML
 
+    def namespaced_manifests(self, *namespaces):
+        """One Deployment + one Service; namespaces assigned round-robin from
+        the given list (one value → uniform namespace)."""
+        docs = []
+        kinds = [("apps/v1", "Deployment", "web"), ("v1", "Service", "web")]
+        for i, (api, kind, name) in enumerate(kinds):
+            ns = namespaces[i % len(namespaces)]
+            docs.append(
+                "apiVersion: %s\nkind: %s\nmetadata:\n  name: %s\n  namespace: %s\nspec: {}\n"
+                % (api, kind, name, ns)
+            )
+        return "---\n".join(docs)
+
+    def cluster_scoped_manifests(self):
+        return (
+            "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: web\nspec: {}\n"
+            "---\n"
+            "apiVersion: rbac.authorization.k8s.io/v1\nkind: ClusterRole\n"
+            "metadata:\n  name: web-reader\nrules: []\n"
+        )
+
+    def manifests_referencing(self, url):
+        return (
+            "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: web\n"
+            "spec:\n  template:\n    spec:\n      containers:\n"
+            "        - name: web\n          image: web:1.0\n          env:\n"
+            "            - name: BACKEND_URL\n              value: %s\n" % url
+        )
+
+    def rendered_helm_output(self):
+        """Typical `helm template` output: release labels, comments naming the
+        source templates — plain YAML, nothing product-specific."""
+        return (
+            "---\n"
+            "# Source: shop/templates/deployment.yaml\n"
+            "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: shop\n"
+            "  labels:\n    app.kubernetes.io/managed-by: Helm\n"
+            "    app.kubernetes.io/instance: shop\nspec: {}\n"
+            "---\n"
+            "# Source: shop/templates/service.yaml\n"
+            "apiVersion: v1\nkind: Service\nmetadata:\n  name: shop\n"
+            "  labels:\n    app.kubernetes.io/managed-by: Helm\nspec: {}\n"
+        )
+
+    def timestamped_manifests(self):
+        return (
+            "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: web\n"
+            "  annotations:\n    example.com/generated-at: \"2026-08-14T10:00:00Z\"\n"
+            "spec: {}\n"
+        )
+
     # --- actions ---
 
     def apply(self, app, sandbox, manifests, actor="dev@example.com"):
@@ -82,10 +133,10 @@ class BundlesPage:
         return (self.last_response.json() or {}).get("error", "")
 
     def findings(self):
-        return (self.last_response.json() or {}).get("findings", [])
+        return (self.last_response.json() or {}).get("findings") or []
 
     def transforms(self):
-        return (self.last_response.json() or {}).get("transforms", [])
+        return (self.last_response.json() or {}).get("transforms") or []
 
     def digest_of_submitted_manifests(self):
         """What the digest must be if it covers the bytes as submitted —

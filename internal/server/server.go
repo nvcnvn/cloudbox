@@ -259,5 +259,10 @@ func (s *Server) getBundle(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, err)
 		return
 	}
-	writeJSON(w, 200, b)
+	writeJSON(w, 200, map[string]any{
+		"digest":     b.Digest,
+		"manifests":  b.ManifestYAML,
+		"transforms": b.Transforms,
+		"findings":   b.Findings,
+	})
 }

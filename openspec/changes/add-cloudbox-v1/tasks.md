@@ -22,13 +22,13 @@ reason, implement until they pass, then commit.
 - [ ] 2.2 control-plane: server-side enforcement with thin CLI; offline check advisory, server intake authoritative — red → green → commit
 - [ ] 2.3 control-plane: shared-cluster and split-cluster topologies with identical evidence semantics — red → green → commit
 - [x] 2.4 bundle-intake: apply accepts plain multi-document Kubernetes YAML of any kind — red → green → commit
-- [ ] 2.5 bundle-intake: every apply produces a content-addressed bundle recorded server-side — red → green → commit
-- [ ] 2.6 bundle-intake: uniform namespace stripped by recorded transform; multi-namespace bundles fail with guidance — red → green → commit
-- [ ] 2.7 bundle-intake: cluster-scoped resources rejected naming manifest and fix — red → green → commit
-- [ ] 2.8 bundle-intake: cross-namespace/FQDN references linted with suggested rewrites — red → green → commit
-- [ ] 2.9 bundle-intake: in-bundle references limited to short names and declared aliases — red → green → commit
-- [ ] 2.10 bundle-intake: Helm/Kustomize enter as rendered output — red → green → commit
-- [ ] 2.11 bundle-intake: non-deterministic renders fail intake with a determinism error — red → green → commit
+- [x] 2.5 bundle-intake: every apply produces a content-addressed bundle recorded server-side — red → green → commit
+- [x] 2.6 bundle-intake: uniform namespace stripped by recorded transform; multi-namespace bundles fail with guidance — red → green → commit
+- [x] 2.7 bundle-intake: cluster-scoped resources rejected naming manifest and fix — red → green → commit
+- [x] 2.8 bundle-intake: cross-namespace/FQDN references linted with suggested rewrites — red → green → commit
+- [x] 2.9 bundle-intake: in-bundle references limited to short names and declared aliases — red → green → commit
+- [x] 2.10 bundle-intake: Helm/Kustomize enter as rendered output — red → green → commit
+- [x] 2.11 bundle-intake: non-deterministic renders fail intake with a determinism error — red → green → commit
 - [ ] 2.12 bundle-intake: offline `check` reports the full fix list without a cluster and exits nonzero on blockers — red → green → commit
 - [ ] 2.13 boundary-contract: contract limited to the four declared kinds — red → green → commit
 - [ ] 2.14 boundary-contract: apply fails on undeclared or unvalued secrets — red → green → commit
