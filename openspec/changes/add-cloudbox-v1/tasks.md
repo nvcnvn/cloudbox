@@ -18,7 +18,7 @@ reason, implement until they pass, then commit.
 
 ## 2. L1 foundation — control plane, bundle intake, boundary contract
 
-- [ ] 2.1 control-plane: five CRDs under one API group, user workloads unwrapped, dependency graph validated — red → green → commit
+- [x] 2.1 control-plane: five CRDs under one API group, user workloads unwrapped, dependency graph validated — red → green → commit
 - [ ] 2.2 control-plane: server-side enforcement with thin CLI; offline check advisory, server intake authoritative — red → green → commit
 - [ ] 2.3 control-plane: shared-cluster and split-cluster topologies with identical evidence semantics — red → green → commit
 - [ ] 2.4 bundle-intake: apply accepts plain multi-document Kubernetes YAML of any kind — red → green → commit

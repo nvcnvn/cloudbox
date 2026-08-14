@@ -6,9 +6,12 @@ object never requires touching environment.py.
 """
 
 from pages.client import ApiClient, Cli
+from pages.applications import ApplicationsPage
+from pages.platform import PlatformPage
 
 
 def attach(context):
     context.api = ApiClient(context.base_url)
     context.cli = Cli(context.cli_path, context.base_url)
-    # Flow page objects are attached here as their capabilities land.
+    context.platform = PlatformPage(context.api)
+    context.applications = ApplicationsPage(context.api)
