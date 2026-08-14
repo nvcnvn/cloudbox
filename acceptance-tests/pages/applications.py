@@ -41,3 +41,29 @@ class ApplicationsPage:
 
     def rejection_message(self):
         return (self.last_response.json() or {}).get("error", "")
+
+    def full_contract(self, dependency_app="billing", alias="billing.deps.internal"):
+        """A contract exercising all four declared kinds."""
+        return {
+            "secretNames": ["payment-api-key"],
+            "ingressHostnames": ["shop.example.com"],
+            "egressAllowlist": ["api.stripe.com"],
+            "dependencies": [{"app": dependency_app, "alias": alias}],
+        }
+
+    def declare_contract(self, app, contract):
+        self.last_response = self._api.put("/v1/applications/%s/contract" % app, json=contract)
+        return self.last_response
+
+    def declared_contract(self, app):
+        resp = self._api.get("/v1/applications/%s" % app)
+        resp.raise_for_status()
+        return resp.json()["contract"]
+
+    def supply_secret_value(self, app, environment, name, value="s3cr3t"):
+        resp = self._api.put(
+            "/v1/applications/%s/secret-values" % app,
+            json={"environment": environment, "name": name, "value": value},
+        )
+        resp.raise_for_status()
+        return resp

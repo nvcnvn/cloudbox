@@ -5,6 +5,7 @@ package server
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 
 	"cloudbox/internal/cluster"
@@ -47,6 +48,8 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /v1/clusters/{cluster}/crds", s.listCRDs)
 	s.mux.HandleFunc("POST /v1/applications", s.createApplication)
 	s.mux.HandleFunc("GET /v1/applications/{app}", s.getApplication)
+	s.mux.HandleFunc("PUT /v1/applications/{app}/contract", s.updateContract)
+	s.mux.HandleFunc("PUT /v1/applications/{app}/secret-values", s.setSecretValue)
 	s.mux.HandleFunc("POST /v1/sandboxes", s.createSandbox)
 	s.mux.HandleFunc("GET /v1/sandboxes/{sandbox}", s.getSandbox)
 	s.mux.HandleFunc("GET /v1/sandboxes/{sandbox}/evidence", s.getEvidence)
@@ -201,6 +204,41 @@ func (s *Server) getApplication(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 200, app)
+}
+
+func (s *Server) updateContract(w http.ResponseWriter, r *http.Request) {
+	// Strict decoding is the C3 mechanism: the four contract kinds are the
+	// complete schema, so an unknown kind is rejected structurally.
+	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
+	var contract core.Contract
+	if err := dec.Decode(&contract); err != nil {
+		writeJSON(w, 422, map[string]string{"error": fmt.Sprintf(
+			"contract rejected (%v): environment variance is limited to secret names, ingress hostnames, the egress allowlist, and internal application dependencies — anything else is out of contract by design; the path is a change to the product spec, not an overlay or templating mechanism",
+			err)})
+		return
+	}
+	if err := s.core.UpdateContract(r.PathValue("app"), contract); err != nil {
+		writeErr(w, err)
+		return
+	}
+	writeJSON(w, 200, contract)
+}
+
+func (s *Server) setSecretValue(w http.ResponseWriter, r *http.Request) {
+	req, ok := decode[struct {
+		Environment string `json:"environment"`
+		Name        string `json:"name"`
+		Value       string `json:"value"` // write-only: recorded as present, never stored
+	}](w, r)
+	if !ok {
+		return
+	}
+	if err := s.core.SetSecretValue(r.PathValue("app"), req.Environment, req.Name); err != nil {
+		writeErr(w, err)
+		return
+	}
+	writeJSON(w, 200, map[string]string{"status": "value recorded", "environment": req.Environment})
 }
 
 func (s *Server) createSandbox(w http.ResponseWriter, r *http.Request) {

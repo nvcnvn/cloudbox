@@ -68,22 +68,26 @@ type Core struct {
 	mu     sync.Mutex
 	driver cluster.Driver
 
-	apps       map[string]*Application
-	installed  map[string]bool // clusters where setup ran
-	bundles    map[string]*Bundle
-	sandboxes  map[string]*Sandbox
-	evidence   map[string]*Evidence // by sandbox name
-	sandboxSeq int
+	apps      map[string]*Application
+	installed map[string]bool // clusters where setup ran
+	bundles   map[string]*Bundle
+	sandboxes map[string]*Sandbox
+	evidence  map[string]*Evidence // by sandbox name
+	// secretValues records presence only, by app → environment → secret name:
+	// the values themselves are write-only and never stored (C1).
+	secretValues map[string]map[string]map[string]bool
+	sandboxSeq   int
 }
 
 func New(driver cluster.Driver) *Core {
 	return &Core{
-		driver:    driver,
-		apps:      map[string]*Application{},
-		installed: map[string]bool{},
-		bundles:   map[string]*Bundle{},
-		sandboxes: map[string]*Sandbox{},
-		evidence:  map[string]*Evidence{},
+		driver:       driver,
+		apps:         map[string]*Application{},
+		installed:    map[string]bool{},
+		bundles:      map[string]*Bundle{},
+		sandboxes:    map[string]*Sandbox{},
+		evidence:     map[string]*Evidence{},
+		secretValues: map[string]map[string]map[string]bool{},
 	}
 }
 
@@ -144,4 +148,60 @@ func (c *Core) GetApplication(name string) (*Application, error) {
 		return nil, errf(404, "application %q is not known", name)
 	}
 	return app, nil
+}
+
+// UpdateContract replaces an application's boundary contract (C1). The four
+// declared kinds are the complete set; the HTTP layer rejects anything else
+// structurally (C3).
+func (c *Core) UpdateContract(appName string, contract Contract) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	app, ok := c.apps[appName]
+	if !ok {
+		return errf(404, "application %q is not known", appName)
+	}
+	for _, dep := range contract.Dependencies {
+		if _, ok := c.apps[dep.App]; !ok {
+			return errf(422,
+				"dangling dependency reference: contract declares a dependency on %q, which does not exist",
+				dep.App)
+		}
+	}
+	app.Contract = contract
+	return nil
+}
+
+// SetSecretValue records that a declared secret has a value for one
+// environment. The value itself is write-only: values are supplied per
+// environment and never live inside bundles or contract records (C1).
+func (c *Core) SetSecretValue(appName, environment, name string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	app, ok := c.apps[appName]
+	if !ok {
+		return errf(404, "application %q is not known", appName)
+	}
+	declared := false
+	for _, s := range app.Contract.SecretNames {
+		if s == name {
+			declared = true
+		}
+	}
+	if !declared {
+		return errf(422, "secret %q is not declared in the boundary contract", name)
+	}
+	if c.secretValues[appName] == nil {
+		c.secretValues[appName] = map[string]map[string]bool{}
+	}
+	if c.secretValues[appName][environment] == nil {
+		c.secretValues[appName][environment] = map[string]bool{}
+	}
+	c.secretValues[appName][environment][name] = true
+	return nil
+}
+
+// hasSecretValue reports whether a declared secret has a value in an
+// environment. Callers hold c.mu.
+func (c *Core) hasSecretValue(appName, environment, name string) bool {
+	return c.secretValues[appName][environment][name]
 }

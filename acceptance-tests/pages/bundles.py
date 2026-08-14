@@ -111,6 +111,14 @@ class BundlesPage:
             "spec: {}\n"
         )
 
+    def secret_mounting_manifests(self, secret_name):
+        return (
+            "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: web\n"
+            "spec:\n  template:\n    spec:\n      containers:\n"
+            "        - name: web\n          image: web:1.0\n          envFrom:\n"
+            "            - secretRef:\n                name: %s\n" % secret_name
+        )
+
     # --- actions ---
 
     def apply(self, app, sandbox, manifests, actor="dev@example.com"):

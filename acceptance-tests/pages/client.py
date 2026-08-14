@@ -19,6 +19,9 @@ class ApiClient:
     def post(self, path, json=None, **kwargs):
         return self._session.post(self.base_url + path, json=json, timeout=10, **kwargs)
 
+    def put(self, path, json=None, **kwargs):
+        return self._session.put(self.base_url + path, json=json, timeout=10, **kwargs)
+
     def delete(self, path, **kwargs):
         return self._session.delete(self.base_url + path, timeout=10, **kwargs)
 

@@ -6,6 +6,7 @@ package core
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 
 	"cloudbox/internal/cluster"
 )
@@ -57,6 +58,37 @@ func (c *Core) Apply(appName, sandboxName, actor, manifestYAML string) (*ApplyRe
 		return nil, err
 	}
 	analysis := AnalyzeManifests(objects, &app.Contract)
+
+	// C2, second half: a declared secret must also have a value for the
+	// target environment. Environment-value state lives server-side, which is
+	// one more reason the offline check stays advisory (CP2).
+	declared := map[string]bool{}
+	for _, s := range app.Contract.SecretNames {
+		declared[s] = true
+	}
+	for _, obj := range objects {
+		for _, secret := range collectSecretRefs(obj.Manifest) {
+			if declared[secret] && !c.hasSecretValue(appName, "sandbox", secret) {
+				analysis.Findings = append(analysis.Findings, Finding{
+					Level:    "blocker",
+					Code:     "secret-missing-value",
+					Manifest: manifestID(obj),
+					Message: fmt.Sprintf(
+						"%s references secret %q, which is declared but has no value for the target environment %q; supply a value for that environment",
+						manifestID(obj), secret, "sandbox"),
+				})
+			}
+		}
+	}
+
+	// S7: capacity is a recorded, digest-preserving admission transform,
+	// declared in evidence — default mode squeezed. Full squeeze semantics
+	// land with the sandbox lifecycle capability.
+	analysis.Transforms = append(analysis.Transforms, Transform{
+		Kind:   "capacity",
+		Detail: "mode squeezed (default): CPU requests scaled, memory floored per container, replica topology preserved",
+	})
+
 	if blockers := analysis.Blockers(); len(blockers) > 0 {
 		return nil, &Error{Status: 422, Message: blockers[0].Message, Findings: analysis.Findings}
 	}
