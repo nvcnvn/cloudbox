@@ -41,17 +41,69 @@ func FromManifest(manifest map[string]any) Object {
 	return obj
 }
 
+// Component is one substrate element installed on a cluster: an operator
+// release owning CRD groups, an admission configuration, or a named class.
+type Component struct {
+	Name     string   `json:"name"`
+	Version  string   `json:"version"`
+	Kind     string   `json:"kind"` // "operator" | "admission" | "class"
+	OwnsCRDs []string `json:"ownsCRDs,omitempty"` // API groups, e.g. cert-manager.io
+	Classes  []string `json:"classes,omitempty"`  // class names this component provides
+}
+
+// Workload is a running unit inside a namespace, admitted from a bundle.
+type Workload struct {
+	Name      string         `json:"name"`
+	Ready     bool           `json:"ready"`
+	OOMKilled bool           `json:"oomKilled"`
+	Manifest  map[string]any `json:"manifest"`
+}
+
+// EgressResult reports how a connection attempt fared under the seal.
+type EgressResult struct {
+	Allowed bool   `json:"allowed"`
+	Via     string `json:"via"` // "in-sandbox" | "cluster-dns" | "egress-proxy" | "unfiltered" | "denied"
+}
+
 // Driver is a fleet of registered clusters.
 type Driver interface {
 	Cluster(name string) (Cluster, bool)
 }
 
-// Cluster is one cluster's control surface, growing per capability.
+// Cluster is one cluster's control surface.
 type Cluster interface {
+	Name() string
+	// UserControlled reports whether the cluster is outside control-plane
+	// custody (a developer's local Kind cluster): its evidence is forgeable
+	// by construction (S3, CP4).
+	UserControlled() bool
+
 	InstallCRDs(crds []CRD)
 	ListCRDs() []CRD
-	// ApplyRaw stores an object exactly as given — the user's own kubectl
-	// path, used to verify CloudBox coexists without wrapping anything.
 	ApplyRaw(obj Object)
 	GetRaw(namespace, kind, name string) (Object, bool)
+
+	// Substrate.
+	KubernetesMinor() string
+	Components() []Component
+	SetComponents(k8sMinor string, comps []Component)
+
+	// Namespaces and the seal.
+	EnsureNamespace(name string)
+	DeleteNamespace(name string)
+	// SealNamespace installs default-deny ingress/egress expressed as standard
+	// NetworkPolicy whose only admitted egress is cluster DNS and the egress
+	// proxy; the proxy enforces the FQDN allowlist (N2/N3, ADR 0001).
+	SealNamespace(name string, allowlist []string)
+	// ProbeEnforcement creates a canary workload and confirms a denied
+	// connection is actually denied (N7). A CNI that ignores NetworkPolicy
+	// fails this probe.
+	ProbeEnforcement() bool
+	// AttemptEgress evaluates one connection attempt from inside a namespace
+	// under whatever the cluster actually enforces.
+	AttemptEgress(namespace, destination string) EgressResult
+
+	// Workloads.
+	AddWorkload(namespace string, w Workload)
+	Workloads(namespace string) []Workload
 }

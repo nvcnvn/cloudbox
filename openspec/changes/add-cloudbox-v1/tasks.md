@@ -37,12 +37,12 @@ reason, implement until they pass, then commit.
 
 ## 3. L1 core — sandbox lifecycle, seal, substrate parity
 
-- [ ] 3.1 sandbox-lifecycle: one-command no-approval creation with owner-scoped RBAC — red → green → commit
-- [ ] 3.2 sandbox-lifecycle: shared-cluster sandboxes sealed and ready within thirty seconds — red → green → commit
-- [ ] 3.3 sandbox-lifecycle: local Kind sandboxes from the lockfile; local evidence non-promotable and non-postable — red → green → commit
-- [ ] 3.4 sandbox-lifecycle: TTL, idle expiry, and per-application quotas — red → green → commit
-- [ ] 3.5 sandbox-lifecycle: PR-bound lifecycle with soak reset on digest change and soak inheritance on identical digest — red → green → commit
-- [ ] 3.6 sandbox-lifecycle: recorded capacity transforms (squeezed default, minimal, full), squeeze-incompatible diagnostics, autoscaler suspension — red → green → commit
+- [x] 3.1 sandbox-lifecycle: one-command no-approval creation with owner-scoped RBAC — red → green → commit
+- [x] 3.2 sandbox-lifecycle: shared-cluster sandboxes sealed and ready within thirty seconds — red → green → commit
+- [x] 3.3 sandbox-lifecycle: local Kind sandboxes from the lockfile; local evidence non-promotable and non-postable — red → green → commit
+- [x] 3.4 sandbox-lifecycle: TTL, idle expiry, and per-application quotas — red → green → commit
+- [x] 3.5 sandbox-lifecycle: PR-bound lifecycle with soak reset on digest change and soak inheritance on identical digest — red → green → commit
+- [x] 3.6 sandbox-lifecycle: recorded capacity transforms (squeezed default, minimal, full), squeeze-incompatible diagnostics, autoscaler suspension — red → green → commit
 - [ ] 3.7 sandbox-seal: sealed before any workload is admitted — red → green → commit
 - [ ] 3.8 sandbox-seal: egress limited to in-sandbox services, cluster DNS, and the allowlist — red → green → commit
 - [ ] 3.9 sandbox-seal: standard NetworkPolicy floor with egress proxy and transparent redirection (ADR 0001) — red → green → commit

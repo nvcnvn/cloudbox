@@ -5,6 +5,7 @@ package core
 import (
 	"fmt"
 	"sync"
+	"time"
 
 	"cloudbox/internal/cluster"
 )
@@ -39,13 +40,25 @@ type Dependency struct {
 	Alias string `json:"alias,omitempty"`
 }
 
+// Policies are per-application operational policy (S5, S7, and later G4/D3).
+type Policies struct {
+	// CPUQuotaPerSandbox caps total CPU requests (in cores) a sandbox may
+	// schedule after transforms; 0 means unlimited (S5).
+	CPUQuotaPerSandbox float64 `json:"cpuQuotaPerSandbox,omitempty"`
+	// IdleExpirySeconds destroys a sandbox with no activity for this long;
+	// 0 disables idle expiry (S5).
+	IdleExpirySeconds int64 `json:"idleExpirySeconds,omitempty"`
+}
+
 // Application is the policy boundary (§5).
 type Application struct {
-	Name      string   `json:"name"`
-	Owners    []string `json:"owners"`
-	Approvers []string `json:"approvers"`
-	Level     string   `json:"level"` // L1..L4
-	Contract  Contract `json:"contract"`
+	Name           string   `json:"name"`
+	Owners         []string `json:"owners"`
+	Approvers      []string `json:"approvers"`
+	Level          string   `json:"level"` // L1..L4
+	Contract       Contract `json:"contract"`
+	Policies       Policies `json:"policies"`
+	SCMIntegration bool     `json:"scmIntegration"` // enables PR-bound sandboxes (S6)
 }
 
 // Error is a user-facing failure with an HTTP-ish status. Intake rejections
@@ -67,28 +80,81 @@ func errf(status int, format string, args ...any) *Error {
 type Core struct {
 	mu     sync.Mutex
 	driver cluster.Driver
+	now    func() time.Time
 
 	apps      map[string]*Application
 	installed map[string]bool // clusters where setup ran
+	// roles holds registered cluster roles; one cluster may hold several
+	// (shared-cluster topology, CP3): "sandbox" | "production".
+	roles map[string]map[string]bool
 	bundles   map[string]*Bundle
 	sandboxes map[string]*Sandbox
 	evidence  map[string]*Evidence // by sandbox name
 	// secretValues records presence only, by app → environment → secret name:
 	// the values themselves are write-only and never stored (C1).
 	secretValues map[string]map[string]map[string]bool
+	audit        []AuditEntry
 	sandboxSeq   int
+	holdSeal     bool // sim arrangement: leave the next sandbox provisioning (N1)
 }
 
-func New(driver cluster.Driver) *Core {
+// AuditEntry is one synchronous audit record (G5, G12, P2).
+type AuditEntry struct {
+	At      time.Time `json:"at"`
+	Actor   string    `json:"actor"`
+	Action  string    `json:"action"`
+	Subject string    `json:"subject"`
+	Detail  string    `json:"detail,omitempty"`
+}
+
+func New(driver cluster.Driver, now func() time.Time) *Core {
 	return &Core{
 		driver:       driver,
+		now:          now,
 		apps:         map[string]*Application{},
 		installed:    map[string]bool{},
+		roles:        map[string]map[string]bool{},
 		bundles:      map[string]*Bundle{},
 		sandboxes:    map[string]*Sandbox{},
 		evidence:     map[string]*Evidence{},
 		secretValues: map[string]map[string]map[string]bool{},
 	}
+}
+
+// RegisterCluster records a cluster's role in the ClusterRegistry (CP3).
+func (c *Core) RegisterCluster(name, role string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if _, ok := c.driver.Cluster(name); !ok {
+		return errf(404, "cluster %q is not known", name)
+	}
+	if c.roles[name] == nil {
+		c.roles[name] = map[string]bool{}
+	}
+	c.roles[name][role] = true
+	return nil
+}
+
+// HoldNextSeal is sim arrangement for N1: the next sandbox stays provisioning
+// until its seal is explicitly completed.
+func (c *Core) HoldNextSeal() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.holdSeal = true
+}
+
+// recordAudit appends one synchronous audit record. Callers hold c.mu.
+func (c *Core) recordAudit(actor, action, subject, detail string) {
+	c.audit = append(c.audit, AuditEntry{
+		At: c.now(), Actor: actor, Action: action, Subject: subject, Detail: detail,
+	})
+}
+
+// AuditLog returns the audit trail.
+func (c *Core) AuditLog() []AuditEntry {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return append([]AuditEntry{}, c.audit...)
 }
 
 // Setup installs the controller and the five product CRDs on a cluster.

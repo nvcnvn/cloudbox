@@ -111,6 +111,40 @@ class BundlesPage:
             "spec: {}\n"
         )
 
+    def prod_sized_manifests(self, name="web", replicas=3, cpu="1000m", memory="512Mi", env=None):
+        env_block = ""
+        if env:
+            env_lines = "".join(
+                "            - name: %s\n              value: \"%s\"\n" % (k, v)
+                for k, v in env.items()
+            )
+            env_block = "          env:\n" + env_lines
+        return (
+            "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: %s\n"
+            "spec:\n  replicas: %d\n  template:\n    spec:\n      containers:\n"
+            "        - name: %s\n          image: %s:1.0\n"
+            "          resources:\n            requests:\n              cpu: \"%s\"\n              memory: \"%s\"\n"
+            "%s" % (name, replicas, name, name, cpu, memory, env_block)
+        )
+
+    def hpa_manifests(self):
+        return (
+            self.prod_sized_manifests()
+            + "---\n"
+            + "apiVersion: autoscaling/v2\nkind: HorizontalPodAutoscaler\n"
+            + "metadata:\n  name: web-hpa\nspec:\n  minReplicas: 3\n  maxReplicas: 10\n"
+        )
+
+    def apply_options(self, app, sandbox, manifests, capacity_mode=None, actor="dev@example.com"):
+        payload = {"app": app, "sandbox": sandbox, "manifests": manifests}
+        if capacity_mode:
+            payload["capacityMode"] = capacity_mode
+        self.last_manifests = manifests
+        self.last_response = self._api.post(
+            "/v1/apply", json=payload, headers={"X-Cloudbox-User": actor}
+        )
+        return self.last_response
+
     def secret_mounting_manifests(self, secret_name):
         return (
             "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: web\n"

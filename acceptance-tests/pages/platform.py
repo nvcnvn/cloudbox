@@ -24,6 +24,20 @@ class PlatformPage:
     def run_setup(self, cluster):
         return self._api.post("/v1/setup", json={"cluster": cluster})
 
+    def register_cluster(self, cluster, role):
+        resp = self._api.post("/v1/clusters/register", json={"cluster": cluster, "role": role})
+        resp.raise_for_status()
+        return resp
+
+    def ensure_ready_platform(self, name="main", enforcing=True):
+        """One installed cluster registered as both sandbox host and
+        production — the shared-cluster topology (CP3)."""
+        self.ensure_cluster(name, enforcing)
+        self.run_setup(name).raise_for_status()
+        self.register_cluster(name, "sandbox")
+        self.register_cluster(name, "production")
+        return name
+
     def installed_crds(self, cluster):
         resp = self._api.get("/v1/clusters/%s/crds" % cluster)
         resp.raise_for_status()
