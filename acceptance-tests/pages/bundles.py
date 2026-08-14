@@ -104,6 +104,13 @@ class BundlesPage:
             "spec: {}\n"
         )
 
+    def random_value_manifests(self):
+        return (
+            "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: web\n"
+            "  annotations:\n    example.com/render-id: \"3f9d2c81-5a44-4b7e-9c10-8e21d4a6f0b2\"\n"
+            "spec: {}\n"
+        )
+
     # --- actions ---
 
     def apply(self, app, sandbox, manifests, actor="dev@example.com"):

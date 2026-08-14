@@ -100,8 +100,15 @@ func ParseManifests(yamlText string) ([]cluster.Object, error) {
 // rfc3339ish spots wall-clock strings a deterministic render must not embed.
 var rfc3339ish = regexp.MustCompile(`\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}`)
 
+// uuidish spots random identifiers a deterministic render must not embed.
+var uuidish = regexp.MustCompile(`(?i)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}`)
+
 // volatileAnnotationKey spots annotation keys that carry render-time values.
-var volatileAnnotationKey = regexp.MustCompile(`(?i)(timestamp|generated-at|rendered-at|build-time|deploy-time)`)
+var volatileAnnotationKey = regexp.MustCompile(`(?i)(timestamp|generated-at|rendered-at|build-time|deploy-time|nonce|random)`)
+
+func volatileValue(s string) bool {
+	return rfc3339ish.MatchString(s) || uuidish.MatchString(s)
+}
 
 // AnalyzeManifests runs the full intake analysis over parsed objects.
 // contract is nil when no boundary contract is available (offline check):
@@ -174,7 +181,7 @@ func AnalyzeManifests(objects []cluster.Object, contract *Contract) IntakeResult
 			if ann, ok := meta["annotations"].(map[string]any); ok {
 				for key, val := range ann {
 					sval, _ := val.(string)
-					if volatileAnnotationKey.MatchString(key) || rfc3339ish.MatchString(sval) {
+					if volatileAnnotationKey.MatchString(key) || volatileValue(sval) {
 						res.Findings = append(res.Findings, Finding{
 							Level:    "blocker",
 							Code:     "non-deterministic-render",

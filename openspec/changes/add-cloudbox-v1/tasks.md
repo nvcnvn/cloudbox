@@ -29,7 +29,7 @@ reason, implement until they pass, then commit.
 - [x] 2.9 bundle-intake: in-bundle references limited to short names and declared aliases — red → green → commit
 - [x] 2.10 bundle-intake: Helm/Kustomize enter as rendered output — red → green → commit
 - [x] 2.11 bundle-intake: non-deterministic renders fail intake with a determinism error — red → green → commit
-- [ ] 2.12 bundle-intake: offline `check` reports the full fix list without a cluster and exits nonzero on blockers — red → green → commit
+- [x] 2.12 bundle-intake: offline `check` reports the full fix list without a cluster and exits nonzero on blockers — red → green → commit
 - [ ] 2.13 boundary-contract: contract limited to the four declared kinds — red → green → commit
 - [ ] 2.14 boundary-contract: apply fails on undeclared or unvalued secrets — red → green → commit
 - [ ] 2.15 boundary-contract: no variance mechanism outside the contract; namespace/capacity are recorded transforms — red → green → commit

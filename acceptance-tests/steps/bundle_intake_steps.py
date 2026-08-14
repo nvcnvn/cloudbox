@@ -253,3 +253,72 @@ def step_impl(context):
     assert det, "expected a determinism finding, got %s" % findings
     assert det[0]["manifest"], "determinism error must name the offending source"
     assert "determinism" in det[0]["message"], det[0]
+
+
+# --- X3: offline check (task 2.12) ---
+
+
+@given("a manifest directory containing a cluster-scoped resource and a multi-namespace bundle")
+def step_impl(context):
+    context.check_dir = context.check.write_directory({
+        "rbac.yaml": context.bundles.cluster_scoped_manifests(),
+        "apps.yaml": context.bundles.namespaced_manifests("team-a", "team-b"),
+    })
+
+
+@given("no cluster is reachable")
+def step_impl(context):
+    context.offline_only = True  # CheckPage always runs the CLI with no server
+
+
+@when("the developer runs the offline check against the directory")
+def step_impl(context):
+    context.check.run(context.check_dir)
+
+
+@then("every violation is reported with the violating manifest and the suggested fix")
+def step_impl(context):
+    assert context.check.findings_reported("cluster-scoped-resource", "multi-namespace"), (
+        "expected both violations reported, got:\n%s" % context.check.result.output
+    )
+    assert context.check.names_manifest_and_fix(), context.check.result.output
+
+
+@then("the command exits nonzero")
+def step_impl(context):
+    assert context.check.exit_code() != 0, "expected nonzero exit"
+
+
+@given("a manifest directory with no intake blockers")
+def step_impl(context):
+    context.check_dir = context.check.write_directory({
+        "app.yaml": context.bundles.plain_mixed_manifests(),
+    })
+
+
+@then("the command reports the directory compatible and exits zero")
+def step_impl(context):
+    assert context.check.reported_compatible(), context.check.result.output
+    assert context.check.exit_code() == 0, (
+        "expected exit 0, got %d:\n%s" % (context.check.exit_code(), context.check.result.output)
+    )
+
+
+@given("a bundle source whose render embeds a random value")
+def step_impl(context):
+    context.check_dir = context.check.write_directory({
+        "app.yaml": context.bundles.random_value_manifests(),
+    })
+
+
+@when("the developer runs the offline check against the source")
+def step_impl(context):
+    context.check.run(context.check_dir)
+
+
+@then("the determinism violation is reported with the offending source")
+def step_impl(context):
+    assert context.check.findings_reported("non-deterministic-render"), (
+        context.check.result.output
+    )
+    assert "Deployment/web" in context.check.result.output, context.check.result.output

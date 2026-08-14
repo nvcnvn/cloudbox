@@ -20,11 +20,23 @@ func main() {
 		fmt.Fprint(os.Stderr, usage)
 		os.Exit(2)
 	}
-	switch os.Args[1] {
+	args := os.Args[1:]
+	// --server names the control plane for online commands; check (X3) never
+	// uses it — it must work with no cluster and no server at all.
+	if len(args) >= 2 && args[0] == "--server" {
+		args = args[2:]
+	}
+	if len(args) == 0 {
+		fmt.Fprint(os.Stderr, usage)
+		os.Exit(2)
+	}
+	switch args[0] {
+	case "check":
+		os.Exit(runCheck(args[1:]))
 	case "version":
 		fmt.Println("cloudbox v1 (development)")
 	default:
-		fmt.Fprintf(os.Stderr, "cloudbox: unknown command %q\n\n%s", os.Args[1], usage)
+		fmt.Fprintf(os.Stderr, "cloudbox: unknown command %q\n\n%s", args[0], usage)
 		os.Exit(2)
 	}
 }
