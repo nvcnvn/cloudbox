@@ -18,19 +18,47 @@ type ProductionState struct {
 	Objects []cluster.Object
 }
 
-// SetProductionState records production's live state for an application (sim
-// arrangement standing in for read access to the production cluster).
-func (c *Core) SetProductionState(appName, manifestYAML string) error {
+// SetProductionState is a write to the application's production namespace by
+// anything OTHER than an approved promotion: the team's own CD below L4, or a
+// human with kubectl. Strict mode denies it unless the actor holds live
+// break-glass credentials (G1/G12); every out-of-band write is checked for
+// divergence.
+func (c *Core) SetProductionState(appName, actor, manifestYAML string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if _, ok := c.apps[appName]; !ok {
+	app, ok := c.apps[appName]
+	if !ok {
 		return errf(404, "application %q is not known", appName)
 	}
+	if app.Level == "L4" {
+		if !c.hasBreakGlassLocked(appName, actor) {
+			return errf(403,
+				"write to managed production namespace %q denied by the product-managed RBAC: in strict mode production is writable only by the controller executing an approved promotion (G1); break-glass is the audited exception (G12)",
+				appName)
+		}
+		c.recordAudit(actor, "break-glass-write", appName, "direct write under break-glass credentials")
+	}
+	if err := c.setProductionObjectsLocked(appName, manifestYAML); err != nil {
+		return err
+	}
+	// G12: any production write outside an approved promotion is divergence.
+	if promoted := c.promoted[appName]; promoted != nil && promoted.Digest != c.production[appName].Digest {
+		promoted.Divergence = fmt.Sprintf(
+			"production write outside an approved promotion: live digest %s no longer matches promoted %s",
+			c.production[appName].Digest, promoted.Digest)
+		promoted.EvidenceValid = false
+		c.recordAudit("cloudbox-controller", "divergence-detected", appName, promoted.Divergence)
+	}
+	return nil
+}
+
+// setProductionObjectsLocked stores live production objects with the
+// server-side noise a normalized diff must ignore. Callers hold c.mu.
+func (c *Core) setProductionObjectsLocked(appName, manifestYAML string) error {
 	objects, err := ParseManifests(manifestYAML)
 	if err != nil {
 		return err
 	}
-	// Live objects carry server-side noise a normalized diff must ignore.
 	for i := range objects {
 		manifest := deepCopy(objects[i].Manifest)
 		if meta, ok := manifest["metadata"].(map[string]any); ok {

@@ -59,6 +59,9 @@ type Policies struct {
 	// MinWitnessedEvents is the witnessed-activity floor for a valid evidence
 	// check (X4/G13).
 	MinWitnessedEvents int `json:"minWitnessedEvents,omitempty"`
+	// RequiredApprovals is the approver count a promotion needs (G4);
+	// 0 means 1.
+	RequiredApprovals int `json:"requiredApprovals,omitempty"`
 }
 
 // TestSuite is the application's declared suite the test command runs (X4).
@@ -80,6 +83,11 @@ type Application struct {
 	// SandboxCluster optionally pins this application's sandboxes to one
 	// registered cluster (CP3 topologies).
 	SandboxCluster string `json:"sandboxCluster,omitempty"`
+	// GitOpsPath is the declared production path write-back commits to (G9).
+	GitOpsPath string `json:"gitOpsPath,omitempty"`
+	// BreakGlassRole names the emergency identities allowed break-glass
+	// access in strict mode (G12); strict mode refuses setup without one.
+	BreakGlassRole []string `json:"breakGlassRole,omitempty"`
 }
 
 // Error is a user-facing failure with an HTTP-ish status. Intake rejections
@@ -117,9 +125,17 @@ type Core struct {
 	production   map[string]*ProductionState // what the team's CD runs (G2)
 	mergeResults map[string]*MergeResult     // app/pr → merge-time binding (G7)
 	prChecks     map[string][]PRCheck        // app/pr → posted status checks (G13/CP4)
-	audit        []AuditEntry
-	sandboxSeq   int
-	holdSeal     bool // sim arrangement: leave the next sandbox provisioning (N1)
+	promotions   map[string]*Promotion
+	gitops       map[string]*gitopsCommit       // app → last write-back commit (G9)
+	history      map[string][]*HistoryEntry     // app → applied production bundles (G11)
+	promoted     map[string]*PromotedState      // app → live promoted state (G12)
+	breakGlass   map[string]map[string]time.Time // app → actor → expiry (G12)
+	failNextSync map[string]bool
+	audit          []AuditEntry
+	auditAvailable bool
+	promotionSeq   int
+	sandboxSeq     int
+	holdSeal       bool // sim arrangement: leave the next sandbox provisioning (N1)
 }
 
 // AuditEntry is one synchronous audit record (G5, G12, P2).
@@ -145,6 +161,13 @@ func New(driver cluster.Driver, now func() time.Time) *Core {
 		production:   map[string]*ProductionState{},
 		mergeResults: map[string]*MergeResult{},
 		prChecks:     map[string][]PRCheck{},
+		promotions:   map[string]*Promotion{},
+		gitops:       map[string]*gitopsCommit{},
+		history:      map[string][]*HistoryEntry{},
+		promoted:     map[string]*PromotedState{},
+		breakGlass:   map[string]map[string]time.Time{},
+		failNextSync: map[string]bool{},
+		auditAvailable: true,
 	}
 }
 
@@ -227,6 +250,12 @@ func (c *Core) CreateApplication(app *Application) error {
 	}
 	if app.Level == "" {
 		app.Level = "L1"
+	}
+	if app.Level == "L4" && len(app.BreakGlassRole) == 0 {
+		// G12: an escape hatch that exists is auditable; one that doesn't
+		// gets improvised.
+		return errf(422,
+			"setup failed: strict mode requires a configured break-glass role — name the emergency identities before enabling L4")
 	}
 	c.apps[app.Name] = app
 	return nil

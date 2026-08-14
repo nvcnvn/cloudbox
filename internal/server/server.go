@@ -87,8 +87,19 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /simctl/scm/prs/{app}/{pr}/checks", s.simPipelineCheck)
 	s.mux.HandleFunc("POST /v1/evidence-checks", s.postEvidenceCheck)
 
-	// Promotion stub: full semantics are the promotion capability.
+	// Promotion (G1/G4/G5/G8/G9/G11/G12).
 	s.mux.HandleFunc("POST /v1/promotions", s.openPromotion)
+	s.mux.HandleFunc("GET /v1/promotions/{id}", s.getPromotion)
+	s.mux.HandleFunc("GET /v1/promotions", s.listPromotions)
+	s.mux.HandleFunc("POST /v1/promotions/{id}/approve", s.approvePromotion)
+	s.mux.HandleFunc("POST /v1/promotions/{id}/apply", s.applyPromotion)
+	s.mux.HandleFunc("POST /v1/promotions/rollback", s.openRollback)
+	s.mux.HandleFunc("POST /v1/break-glass", s.grantBreakGlass)
+	s.mux.HandleFunc("GET /v1/applications/{app}/credentials", s.credentialsReport)
+	s.mux.HandleFunc("GET /v1/applications/{app}/production-status", s.productionStatus)
+	s.mux.HandleFunc("POST /simctl/gitops/{app}/sync", s.simGitOpsSync)
+	s.mux.HandleFunc("POST /simctl/gitops/{app}/fail-next-sync", s.simFailNextSync)
+	s.mux.HandleFunc("POST /simctl/audit-sink", s.simAuditSink)
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -574,7 +585,7 @@ func (s *Server) simSetProduction(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if err := s.core.SetProductionState(r.PathValue("app"), req.Manifests); err != nil {
+	if err := s.core.SetProductionState(r.PathValue("app"), actor(r), req.Manifests); err != nil {
 		writeErr(w, err)
 		return
 	}
@@ -674,9 +685,115 @@ func (s *Server) openPromotion(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if err := s.core.RequireManagedSandbox(req.Sandbox, "open a promotion"); err != nil {
+	p, err := s.core.OpenPromotion(req.Sandbox, actor(r))
+	if err != nil {
 		writeErr(w, err)
 		return
 	}
-	writeJSON(w, 501, map[string]string{"error": "promotions land with the promotion capability"})
+	writeJSON(w, 201, p)
+}
+
+func (s *Server) getPromotion(w http.ResponseWriter, r *http.Request) {
+	p, err := s.core.GetPromotion(r.PathValue("id"))
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	writeJSON(w, 200, p)
+}
+
+func (s *Server) listPromotions(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, 200, map[string]any{"promotions": s.core.ListPromotions(r.URL.Query().Get("app"))})
+}
+
+func (s *Server) approvePromotion(w http.ResponseWriter, r *http.Request) {
+	p, err := s.core.Approve(r.PathValue("id"), actor(r))
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	writeJSON(w, 200, p)
+}
+
+func (s *Server) applyPromotion(w http.ResponseWriter, r *http.Request) {
+	p, err := s.core.ExecuteApply(r.PathValue("id"), actor(r))
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	writeJSON(w, 200, p)
+}
+
+func (s *Server) openRollback(w http.ResponseWriter, r *http.Request) {
+	req, ok := decode[struct {
+		App    string `json:"app"`
+		Digest string `json:"digest"`
+	}](w, r)
+	if !ok {
+		return
+	}
+	p, err := s.core.OpenRollback(req.App, req.Digest, actor(r))
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	writeJSON(w, 201, p)
+}
+
+func (s *Server) grantBreakGlass(w http.ResponseWriter, r *http.Request) {
+	req, ok := decode[struct {
+		App string `json:"app"`
+	}](w, r)
+	if !ok {
+		return
+	}
+	grant, err := s.core.GrantBreakGlass(req.App, actor(r))
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	writeJSON(w, 201, grant)
+}
+
+func (s *Server) credentialsReport(w http.ResponseWriter, r *http.Request) {
+	report, err := s.core.CredentialsReport(r.PathValue("app"))
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	writeJSON(w, 200, report)
+}
+
+func (s *Server) productionStatus(w http.ResponseWriter, r *http.Request) {
+	status, err := s.core.ProductionStatus(r.PathValue("app"))
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	writeJSON(w, 200, status)
+}
+
+func (s *Server) simGitOpsSync(w http.ResponseWriter, r *http.Request) {
+	p, err := s.core.GitOpsSync(r.PathValue("app"))
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	writeJSON(w, 200, p)
+}
+
+func (s *Server) simFailNextSync(w http.ResponseWriter, r *http.Request) {
+	s.core.FailNextSync(r.PathValue("app"))
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) simAuditSink(w http.ResponseWriter, r *http.Request) {
+	req, ok := decode[struct {
+		Available bool `json:"available"`
+	}](w, r)
+	if !ok {
+		return
+	}
+	s.core.SetAuditSink(req.Available)
+	w.WriteHeader(http.StatusNoContent)
 }

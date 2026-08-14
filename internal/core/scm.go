@@ -75,6 +75,14 @@ func (c *Core) HandleSCMEvent(ev SCMEvent) (*Sandbox, error) {
 			// G7: re-render the merge result and bind evidence by digest
 			// before the sandbox goes away.
 			c.bindMergeResult(sb, ev.PR, ev.Manifests)
+			// G8 (queued, the v1 default): at L3+ a merge with transferred
+			// evidence opens a promotion awaiting explicit approval.
+			result := c.mergeResults[prKey(sb.App, ev.PR)]
+			if (app.Level == "L3" || app.Level == "L4") && result != nil && result.Status == "transferred" {
+				if _, err := c.openPromotionLocked(app, sb.Name, result.MergedDigest, ev.Author, result.Evidence, nil); err != nil {
+					return nil, err
+				}
+			}
 		}
 		// TTL fires on PR close or merge (S6).
 		c.destroyLocked(sb)

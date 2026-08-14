@@ -74,16 +74,16 @@ reason, implement until they pass, then commit.
 
 ## 6. L3 — promotion
 
-- [ ] 6.1 promotion: declared approval policy with server-side self-approval rejection — red → green → commit
-- [ ] 6.2 promotion: synchronous audit of every transition; unavailable sink blocks — red → green → commit
-- [ ] 6.3 promotion: merge opens a queued promotion awaiting explicit approval — red → green → commit
-- [ ] 6.4 promotion: write-back commits the bundle, GitOps applies, completion on live digest match; parity with direct mode — red → green → commit
-- [ ] 6.5 promotion: rollback is a promotion with retained bundles, original evidence, production history; failed applies recorded — red → green → commit
+- [x] 6.1 promotion: declared approval policy with server-side self-approval rejection — red → green → commit
+- [x] 6.2 promotion: synchronous audit of every transition; unavailable sink blocks — red → green → commit
+- [x] 6.3 promotion: merge opens a queued promotion awaiting explicit approval — red → green → commit
+- [x] 6.4 promotion: write-back commits the bundle, GitOps applies, completion on live digest match; parity with direct mode — red → green → commit
+- [x] 6.5 promotion: rollback is a promotion with retained bundles, original evidence, production history; failed applies recorded — red → green → commit
 
 ## 7. L4 — strict mode
 
-- [ ] 7.1 promotion: strict mode single-writer RBAC; no production-targeting CLI path; no prod credentials below L4 — red → green → commit
-- [ ] 7.2 promotion: break-glass with auto-expiring audited access; divergence detection invalidates evidence until reconciled; setup fails without a break-glass role — red → green → commit
+- [x] 7.1 promotion: strict mode single-writer RBAC; no production-targeting CLI path; no prod credentials below L4 — red → green → commit
+- [x] 7.2 promotion: break-glass with auto-expiring audited access; divergence detection invalidates evidence until reconciled; setup fails without a break-glass role — red → green → commit
 
 ## 8. Data fidelity
 
