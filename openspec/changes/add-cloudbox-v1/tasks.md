@@ -43,14 +43,14 @@ reason, implement until they pass, then commit.
 - [x] 3.4 sandbox-lifecycle: TTL, idle expiry, and per-application quotas — red → green → commit
 - [x] 3.5 sandbox-lifecycle: PR-bound lifecycle with soak reset on digest change and soak inheritance on identical digest — red → green → commit
 - [x] 3.6 sandbox-lifecycle: recorded capacity transforms (squeezed default, minimal, full), squeeze-incompatible diagnostics, autoscaler suspension — red → green → commit
-- [ ] 3.7 sandbox-seal: sealed before any workload is admitted — red → green → commit
-- [ ] 3.8 sandbox-seal: egress limited to in-sandbox services, cluster DNS, and the allowlist — red → green → commit
-- [ ] 3.9 sandbox-seal: standard NetworkPolicy floor with egress proxy and transparent redirection (ADR 0001) — red → green → commit
-- [ ] 3.10 sandbox-seal: blocked egress recorded with destination, timestamp, attribution — red → green → commit
-- [ ] 3.11 sandbox-seal: no per-sandbox weakening; allowlist changes are audited admin policy — red → green → commit
-- [ ] 3.12 sandbox-seal: user NetworkPolicy narrows but never widens — red → green → commit
-- [ ] 3.13 sandbox-seal: probe-verified enforcement; non-enforcing clusters never sealed, never evidenced — red → green → commit
-- [ ] 3.14 sandbox-seal: published containment claims match the declared threat-model scope — red → green → commit
+- [x] 3.7 sandbox-seal: sealed before any workload is admitted — red → green → commit
+- [x] 3.8 sandbox-seal: egress limited to in-sandbox services, cluster DNS, and the allowlist — red → green → commit
+- [x] 3.9 sandbox-seal: standard NetworkPolicy floor with egress proxy and transparent redirection (ADR 0001) — red → green → commit
+- [x] 3.10 sandbox-seal: blocked egress recorded with destination, timestamp, attribution — red → green → commit
+- [x] 3.11 sandbox-seal: no per-sandbox weakening; allowlist changes are audited admin policy — red → green → commit
+- [x] 3.12 sandbox-seal: user NetworkPolicy narrows but never widens — red → green → commit
+- [x] 3.13 sandbox-seal: probe-verified enforcement; non-enforcing clusters never sealed, never evidenced — red → green → commit
+- [x] 3.14 sandbox-seal: published containment claims match the declared threat-model scope — red → green → commit
 - [ ] 3.15 substrate-parity: application-scoped lockfile with digest; declared-not-verified identity/secrets — red → green → commit
 - [ ] 3.16 substrate-parity: evidence carries substrate digest, invalid on mismatch, audited override — red → green → commit
 - [ ] 3.17 substrate-parity: sandbox substrates provisioned from the lockfile — red → green → commit
