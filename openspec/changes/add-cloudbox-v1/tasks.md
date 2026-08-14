@@ -97,5 +97,5 @@ reason, implement until they pass, then commit.
 
 ## 9. Completion
 
-- [ ] 9.1 Run the full suite: every scenario passes, zero pending/undefined steps, HTML report generated under `acceptance-tests/reports/`
-- [ ] 9.2 Verify the composition: `.extracted/` rebuilt, nothing loaded from `openspec/changes/archive/`, no duplicate scenarios, composition report clean
+- [x] 9.1 Run the full suite: every scenario passes, zero pending/undefined steps, HTML report generated under `acceptance-tests/reports/`
+- [x] 9.2 Verify the composition: `.extracted/` rebuilt, nothing loaded from `openspec/changes/archive/`, no duplicate scenarios, composition report clean
