@@ -20,6 +20,10 @@ type Evidence struct {
 
 	Valid          bool     `json:"valid"`
 	InvalidReasons []string `json:"invalidReasons,omitempty"`
+
+	// substrateOverridden survives snapshot recomputation: an admin accepted
+	// the mismatch and the audit log holds the override (P2).
+	substrateOverridden bool
 }
 
 // evidenceFor returns the sandbox's evidence draft, creating it on first use.
@@ -56,7 +60,7 @@ func (c *Core) snapshotEvidence(sb *Sandbox) *Evidence {
 		ev.Valid = false
 		ev.InvalidReasons = append(ev.InvalidReasons, "seal not verified")
 	}
-	if prod, ok := c.productionCluster(); ok {
+	if prod, ok := c.productionCluster(); ok && !ev.substrateOverridden {
 		prodDigest := c.lockfileFor(sb.App, prod).Digest
 		if ev.SubstrateDigest != prodDigest {
 			// P2: evidence is invalid on substrate digest mismatch.
@@ -113,6 +117,7 @@ func (c *Core) OverrideSubstrateMismatch(sandboxName, admin, reason string) erro
 		return errf(404, "sandbox %q is not known", sandboxName)
 	}
 	ev := c.evidenceFor(sb)
+	ev.substrateOverridden = true
 	ev.Valid = true
 	ev.InvalidReasons = nil
 	c.recordAudit(admin, "substrate-mismatch-override", sandboxName, reason)

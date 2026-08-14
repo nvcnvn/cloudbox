@@ -38,6 +38,35 @@ class PlatformPage:
         self.register_cluster(name, "production")
         return name
 
+    def ensure_split_platform(self, components=None):
+        """Separate sandbox and production clusters (CP3), optionally with the
+        same substrate components installed on both."""
+        self.ensure_cluster("sbx-cluster")
+        self.run_setup("sbx-cluster").raise_for_status()
+        self.register_cluster("sbx-cluster", "sandbox")
+        self.ensure_cluster("prod-cluster")
+        self.register_cluster("prod-cluster", "production")
+        if components is not None:
+            self.set_components("sbx-cluster", components)
+            self.set_components("prod-cluster", components)
+        return "sbx-cluster", "prod-cluster"
+
+    def set_components(self, cluster, components, kubernetes_minor="1.31"):
+        self._api.post(
+            "/simctl/clusters/%s/components" % cluster,
+            json={"kubernetesMinor": kubernetes_minor, "components": components},
+        ).raise_for_status()
+
+    def lockfile(self, app):
+        resp = self._api.get("/v1/applications/%s/substrate-lockfile" % app)
+        resp.raise_for_status()
+        return resp.json()
+
+    def audit_entries(self):
+        resp = self._api.get("/v1/audit")
+        resp.raise_for_status()
+        return resp.json().get("entries") or []
+
     def installed_crds(self, cluster):
         resp = self._api.get("/v1/clusters/%s/crds" % cluster)
         resp.raise_for_status()

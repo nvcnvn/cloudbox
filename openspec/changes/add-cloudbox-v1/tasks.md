@@ -51,10 +51,10 @@ reason, implement until they pass, then commit.
 - [x] 3.12 sandbox-seal: user NetworkPolicy narrows but never widens — red → green → commit
 - [x] 3.13 sandbox-seal: probe-verified enforcement; non-enforcing clusters never sealed, never evidenced — red → green → commit
 - [x] 3.14 sandbox-seal: published containment claims match the declared threat-model scope — red → green → commit
-- [ ] 3.15 substrate-parity: application-scoped lockfile with digest; declared-not-verified identity/secrets — red → green → commit
-- [ ] 3.16 substrate-parity: evidence carries substrate digest, invalid on mismatch, audited override — red → green → commit
-- [ ] 3.17 substrate-parity: sandbox substrates provisioned from the lockfile — red → green → commit
-- [ ] 3.18 substrate-parity: production drift invalidates only referencing applications (ADR 0006) — red → green → commit
+- [x] 3.15 substrate-parity: application-scoped lockfile with digest; declared-not-verified identity/secrets — red → green → commit
+- [x] 3.16 substrate-parity: evidence carries substrate digest, invalid on mismatch, audited override — red → green → commit
+- [x] 3.17 substrate-parity: sandbox substrates provisioned from the lockfile — red → green → commit
+- [x] 3.18 substrate-parity: production drift invalidates only referencing applications (ADR 0006) — red → green → commit
 
 ## 4. L1 ergonomics
 

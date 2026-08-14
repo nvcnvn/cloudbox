@@ -9,8 +9,9 @@ class SandboxesPage:
         self._platform = platform
         self.last_response = None
 
-    def create(self, app, owner=DEFAULT_DEV, local=False, ttl_seconds=0, expect_ok=True):
-        self._platform.ensure_ready_platform()
+    def create(self, app, owner=DEFAULT_DEV, local=False, ttl_seconds=0, expect_ok=True, arrange=True):
+        if arrange:
+            self._platform.ensure_ready_platform()
         payload = {"app": app, "local": local}
         if ttl_seconds:
             payload["ttlSeconds"] = ttl_seconds
