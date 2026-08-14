@@ -8,13 +8,13 @@ reason, implement until they pass, then commit.
 
 ## 1. First-time setup — skip this whole section if `acceptance-tests/` already exists
 
-- [ ] 1.1 Confirm the acceptance stack: `stack: python` is already recorded in `openspec/config.yaml` — verify it and do not re-ask
-- [ ] 1.2 Set up the application skeleton (controller binary, CLI entry point, run script) so the app can boot; record the implementation-stack choice (e.g. Go + kubebuilder for controller and CLI) as a new ADR if it is durable
-- [ ] 1.3 Create `acceptance-tests/` at the repo root as an independent Python project (behave >= 1.2.7, behave-html-formatter, requests, beautifulsoup4) that boots the app before the suite and shuts it down after
-- [ ] 1.4 Copy the acceptance-test-authoring skill's Python reference files verbatim into `acceptance-tests/`: `extract_gherkin.py`, `openspec_effective_spec.py`, `run_acceptance.py`, `behave.ini`, `environment.py`, and the shared lintrc as `.gherkin-lintrc` — `steps/` and `environment.py` at the `acceptance-tests/` root — so the runner extracts every `spec.md` under `openspec/` into `acceptance-tests/.extracted/` and discovers the extracted features, excluding `openspec/changes/archive/`
-- [ ] 1.5 Make the single test command (`python run_acceptance.py`) always generate an HTML report under `acceptance-tests/reports/`
-- [ ] 1.6 Add the spec-lint command (extract, then `npx gherkin-lint` with `.gherkin-lintrc` over `.extracted`) and gitignore `acceptance-tests/.extracted/` and `acceptance-tests/reports/`
-- [ ] 1.7 Write `acceptance-tests/README.md` with instructions for running the suite and where the HTML report is written
+- [x] 1.1 Confirm the acceptance stack: `stack: python` is already recorded in `openspec/config.yaml` — verify it and do not re-ask
+- [x] 1.2 Set up the application skeleton (controller binary, CLI entry point, run script) so the app can boot; record the implementation-stack choice (e.g. Go + kubebuilder for controller and CLI) as a new ADR if it is durable
+- [x] 1.3 Create `acceptance-tests/` at the repo root as an independent Python project (behave >= 1.2.7, behave-html-formatter, requests, beautifulsoup4) that boots the app before the suite and shuts it down after
+- [x] 1.4 Copy the acceptance-test-authoring skill's Python reference files verbatim into `acceptance-tests/`: `extract_gherkin.py`, `openspec_effective_spec.py`, `run_acceptance.py`, `behave.ini`, `environment.py`, and the shared lintrc as `.gherkin-lintrc` — `steps/` and `environment.py` at the `acceptance-tests/` root — so the runner extracts every `spec.md` under `openspec/` into `acceptance-tests/.extracted/` and discovers the extracted features, excluding `openspec/changes/archive/`
+- [x] 1.5 Make the single test command (`python run_acceptance.py`) always generate an HTML report under `acceptance-tests/reports/`
+- [x] 1.6 Add the spec-lint command (extract, then `npx gherkin-lint` with `.gherkin-lintrc` over `.extracted`) and gitignore `acceptance-tests/.extracted/` and `acceptance-tests/reports/`
+- [x] 1.7 Write `acceptance-tests/README.md` with instructions for running the suite and where the HTML report is written
 
 ## 2. L1 foundation — control plane, bundle intake, boundary contract
 
