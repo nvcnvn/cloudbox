@@ -24,7 +24,7 @@ reachable under `--driver kube`.
 Adding this change's specs put 22 scenarios and 78 undefined steps into the
 effective suite, so the default run is red until 1.1 lands. Do this first.
 
-- [ ] 1.1 conformance-ci: the default acceptance run excludes conformance-tagged scenarios and the conformance run selects only them — add the tag vocabulary, the `behave.ini` default exclusion, and a conformance mode in `run_acceptance.py` that boots `cloudboxd --driver kube`; keep the `OPENSPEC_ACCEPTANCE` tripwire intact — red → green → commit
+- [x] 1.1 conformance-ci: the default acceptance run excludes conformance-tagged scenarios and the conformance run selects only them — add the tag vocabulary, the `behave.ini` default exclusion, and a conformance mode in `run_acceptance.py` that boots `cloudboxd --driver kube`; keep the `OPENSPEC_ACCEPTANCE` tripwire intact — red → green → commit
 - [ ] 1.2 conformance-ci: scenarios the real run cannot honestly prove are excluded and recorded — define the subset with its exclusion reasons (soak windows specified in hours; scenarios arranged only through simulated source control, GitOps, audit sinks, production state, or datastore seeding) — red → green → commit
 
 ## 2. Continuous integration foundation

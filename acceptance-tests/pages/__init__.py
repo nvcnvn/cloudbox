@@ -10,6 +10,7 @@ from pages.applications import ApplicationsPage
 from pages.bundles import BundlesPage
 from pages.check import CheckPage
 from pages.platform import PlatformPage
+from pages.runner import RunnerPage
 from pages.sandboxes import SandboxesPage
 from pages.scm import ScmPage
 
@@ -23,3 +24,4 @@ def attach(context):
     context.bundles = BundlesPage(context.api)
     context.check = CheckPage(context.cli)
     context.scm = ScmPage(context.api)
+    context.runner = RunnerPage()

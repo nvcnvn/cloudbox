@@ -15,9 +15,15 @@ documented way to run the suite:
 
     python run_acceptance.py                  # the effective spec (default)
     python run_acceptance.py --specs          # source of truth only, as-is
+    python run_acceptance.py --conformance    # only @conformance, driver=kube
     python run_acceptance.py --lint           # extract, then lint the output
     python run_acceptance.py --print-locations  # show the resolved composition
     python run_acceptance.py --dry-run        # (passthrough) behave dry run
+
+The default run excludes @conformance via behave.ini's default_tags, so it
+never needs a cluster. --conformance inverts the selection (--tags=@conformance
+overrides default_tags) and sets CLOUDBOX_DRIVER=kube, which environment.py
+reads to boot cloudboxd against a real cluster instead of the sim.
 
 Anything not consumed here is passed straight through to behave.
 
@@ -52,7 +58,16 @@ def main(argv):
     specs_only = "--specs" in argv
     print_only = "--print-locations" in argv
     lint = "--lint" in argv
-    passthrough = [a for a in argv if a not in ("--specs", "--print-locations", "--lint")]
+    conformance = "--conformance" in argv
+    passthrough = [
+        a for a in argv
+        if a not in ("--specs", "--print-locations", "--lint", "--conformance")
+    ]
+    if conformance:
+        # Select ONLY the tagged subset (overriding behave.ini's default
+        # exclusion) and have environment.py boot the real driver.
+        passthrough = ["--tags=@conformance"] + passthrough
+        os.environ["CLOUDBOX_DRIVER"] = "kube"
 
     try:
         out_dir, written = extract_all()

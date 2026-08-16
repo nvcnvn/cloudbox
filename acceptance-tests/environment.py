@@ -16,9 +16,11 @@ This file must sit at the acceptance-tests/ root alongside steps/ -- behave
 derives its base directory by walking UP from the first location argument until
 it finds a steps/ directory, and loads environment.py from there.
 
-The app under test is cloudboxd with the simulated cluster driver (ADR 0007):
-built once in before_all, booted once on a free port, state reset between
-scenarios via the sim driver's /simctl/reset.
+The app under test is cloudboxd: built once in before_all, booted once on a
+free port. The cluster driver comes from CLOUDBOX_DRIVER (default "sim", set
+to "kube" by run_acceptance.py --conformance per ADR 0008). Under sim, state
+resets between scenarios via /simctl/reset; under kube that surface does not
+exist -- conformance scenarios own their arrangement through the product API.
 """
 
 import os
@@ -63,23 +65,35 @@ def before_all(context):
         cwd=REPO, check=True,
     )
 
+    context.driver = os.environ.get("CLOUDBOX_DRIVER", "sim")
     port = _free_port()
     context.base_url = "http://127.0.0.1:%d" % port
     context.cli_path = str(REPO / "bin" / "cloudbox")
     context.app = subprocess.Popen(
-        [str(REPO / "bin" / "cloudboxd"), "--addr", "127.0.0.1:%d" % port, "--driver", "sim"]
+        [
+            str(REPO / "bin" / "cloudboxd"),
+            "--addr", "127.0.0.1:%d" % port,
+            "--driver", context.driver,
+        ]
     )
 
-    deadline = time.time() + 15
+    # A real cluster takes longer to reach healthy (CRD installs, API round
+    # trips) than the in-process sim.
+    deadline = time.time() + (120 if context.driver == "kube" else 15)
     while True:
         try:
             if requests.get(context.base_url + "/healthz", timeout=1).ok:
                 break
         except requests.ConnectionError:
             pass
+        if context.app.poll() is not None:
+            raise RuntimeError(
+                "cloudboxd exited with code %d before becoming healthy "
+                "(driver=%s)" % (context.app.returncode, context.driver)
+            )
         if time.time() > deadline:
             context.app.terminate()
-            raise RuntimeError("cloudboxd did not become healthy within 15s")
+            raise RuntimeError("cloudboxd did not become healthy before the deadline")
         time.sleep(0.1)
 
 
@@ -91,5 +105,8 @@ def after_all(context):
 
 
 def before_scenario(context, scenario):
-    requests.post(context.base_url + "/simctl/reset", timeout=5).raise_for_status()
+    # /simctl/* exists only when the sim driver is constructed (ADR 0008);
+    # under kube there is no arrangement surface to reset.
+    if context.driver == "sim":
+        requests.post(context.base_url + "/simctl/reset", timeout=5).raise_for_status()
     pages.attach(context)
