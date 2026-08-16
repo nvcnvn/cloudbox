@@ -17,6 +17,9 @@ class PlatformPage:
     def __init__(self, api):
         self._api = api
 
+    def healthy(self):
+        return self._api.get("/healthz").ok
+
     def ensure_cluster(self, name, enforcing=True):
         self._api.post("/simctl/clusters", json={"name": name, "enforcing": enforcing}).raise_for_status()
         return name

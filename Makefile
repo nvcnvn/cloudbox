@@ -25,4 +25,5 @@ conformance:
 	@mkdir -p acceptance-tests/reports
 	hack/conformance/kind-enforcing.sh
 	cd acceptance-tests && KUBECONFIG=$(CURDIR)/acceptance-tests/.kube/conformance.kubeconfig \
+		CLOUDBOX_KUBE_CONTEXT=kind-cloudbox-conformance \
 		.venv/bin/python run_acceptance.py --conformance

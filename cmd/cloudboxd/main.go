@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 
+	"cloudbox/internal/cluster/kube"
 	"cloudbox/internal/server"
 	"cloudbox/internal/sim"
 )
@@ -21,9 +22,17 @@ func main() {
 		srv := server.New(sim.NewWorld())
 		log.Printf("cloudboxd listening on %s (driver=sim)", *addr)
 		log.Fatal(http.ListenAndServe(*addr, srv))
+	case "kube":
+		// The production path (ADR 0008): real clusters named by kubeconfig
+		// context, real clock, and no /simctl arrangement surface.
+		d, err := kube.NewDriver()
+		if err != nil {
+			log.Fatalf("cloudboxd: loading kubeconfig for the kube driver: %v", err)
+		}
+		srv := server.NewWithDriver(d)
+		log.Printf("cloudboxd listening on %s (driver=kube)", *addr)
+		log.Fatal(http.ListenAndServe(*addr, srv))
 	default:
-		// The kube driver is the production path (ADR 0007); it lands behind
-		// the same server API once the sim-verified behavior contracts hold.
 		log.Fatalf("cloudboxd: unsupported driver %q", *driver)
 	}
 }

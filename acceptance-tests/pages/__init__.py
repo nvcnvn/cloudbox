@@ -10,6 +10,7 @@ from pages.applications import ApplicationsPage
 from pages.bundles import BundlesPage
 from pages.check import CheckPage
 from pages.conformance import ConformanceSubsetPage
+from pages.kube import KubeClusterPage
 from pages.platform import PlatformPage
 from pages.runner import RunnerPage
 from pages.sandboxes import SandboxesPage
@@ -27,3 +28,4 @@ def attach(context):
     context.scm = ScmPage(context.api)
     context.runner = RunnerPage()
     context.conformance_subset = ConformanceSubsetPage()
+    context.kube = KubeClusterPage()

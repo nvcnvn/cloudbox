@@ -20,10 +20,27 @@ type Server struct {
 	mux   *http.ServeMux
 }
 
+// New serves the product API against the sim driver, on the sim clock, with
+// the /simctl/* test-arrangement surface registered (ADR 0007).
 func New(world *sim.World) *Server {
 	s := &Server{}
 	s.reset(world)
-	s.routes()
+	s.mux = http.NewServeMux()
+	s.mux.HandleFunc("GET /healthz", s.healthz)
+	s.simRoutes()
+	s.v1Routes()
+	return s
+}
+
+// NewWithDriver serves the product API against a real cluster driver, on the
+// real clock. The /simctl/* arrangement surface is NEVER registered here: it
+// exists only when the sim driver is constructed (ADR 0007, ADR 0008), so no
+// test-arrangement endpoint is reachable under --driver kube.
+func NewWithDriver(driver cluster.Driver) *Server {
+	s := &Server{core: core.New(driver, time.Now)}
+	s.mux = http.NewServeMux()
+	s.mux.HandleFunc("GET /healthz", s.healthz)
+	s.v1Routes()
 	return s
 }
 
@@ -32,13 +49,10 @@ func (s *Server) reset(world *sim.World) {
 	s.core = core.New(world, world.Now)
 }
 
-func (s *Server) routes() {
-	s.mux = http.NewServeMux()
-	s.mux.HandleFunc("GET /healthz", s.healthz)
-
-	// /simctl/* is the sim driver's test-arrangement surface (ADR 0007):
-	// conjure clusters, advance the clock, arrange out-of-band state the way
-	// Given-steps need. Only wired when the sim driver is in play.
+// simRoutes is the sim driver's test-arrangement surface (ADR 0007): conjure
+// clusters, advance the clock, arrange out-of-band state the way Given-steps
+// need. Only wired when the sim driver is in play.
+func (s *Server) simRoutes() {
 	s.mux.HandleFunc("POST /simctl/reset", s.simReset)
 	s.mux.HandleFunc("POST /simctl/clusters", s.simCreateCluster)
 	s.mux.HandleFunc("POST /simctl/clusters/{cluster}/objects", s.simApplyRaw)
@@ -49,7 +63,16 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /simctl/sandboxes/{sandbox}/complete-seal", s.simCompleteSeal)
 	s.mux.HandleFunc("POST /simctl/sandboxes/{sandbox}/egress-attempts", s.simAttemptEgress)
 	s.mux.HandleFunc("POST /simctl/oom-under-squeeze", s.simMarkOOM)
+	s.mux.HandleFunc("POST /simctl/production/{app}", s.simSetProduction)
+	s.mux.HandleFunc("POST /simctl/scm/prs/{app}/{pr}/checks", s.simPipelineCheck)
+	s.mux.HandleFunc("POST /simctl/gitops/{app}/sync", s.simGitOpsSync)
+	s.mux.HandleFunc("POST /simctl/gitops/{app}/fail-next-sync", s.simFailNextSync)
+	s.mux.HandleFunc("POST /simctl/audit-sink", s.simAuditSink)
+	s.mux.HandleFunc("POST /simctl/databases/{app}/{datastore}", s.simSeedDatabase)
+	s.mux.HandleFunc("POST /simctl/fail-migration", s.simFailMigration)
+}
 
+func (s *Server) v1Routes() {
 	s.mux.HandleFunc("POST /v1/setup", s.setup)
 	s.mux.HandleFunc("POST /v1/clusters/register", s.registerCluster)
 	s.mux.HandleFunc("GET /v1/clusters/{cluster}/crds", s.listCRDs)
@@ -77,14 +100,12 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /v1/audit", s.auditLog)
 
 	// Evidence, diff, witnessed tests, merge binding, checks (G2/G7/G13/X4).
-	s.mux.HandleFunc("POST /simctl/production/{app}", s.simSetProduction)
 	s.mux.HandleFunc("GET /v1/applications/{app}/diff/{digest}", s.diff)
 	s.mux.HandleFunc("POST /v1/sandboxes/{sandbox}/test", s.runTests)
 	s.mux.HandleFunc("POST /v1/sandboxes/{sandbox}/test-results", s.assertTestResults)
 	s.mux.HandleFunc("POST /v1/sandboxes/{sandbox}/datastores", s.setDatastore)
 	s.mux.HandleFunc("GET /v1/applications/{app}/prs/{pr}/merge-result", s.mergeResult)
 	s.mux.HandleFunc("GET /v1/scm/prs/{app}/{pr}/checks", s.listChecks)
-	s.mux.HandleFunc("POST /simctl/scm/prs/{app}/{pr}/checks", s.simPipelineCheck)
 	s.mux.HandleFunc("POST /v1/evidence-checks", s.postEvidenceCheck)
 
 	// Promotion (G1/G4/G5/G8/G9/G11/G12).
@@ -97,13 +118,8 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /v1/break-glass", s.grantBreakGlass)
 	s.mux.HandleFunc("GET /v1/applications/{app}/credentials", s.credentialsReport)
 	s.mux.HandleFunc("GET /v1/applications/{app}/production-status", s.productionStatus)
-	s.mux.HandleFunc("POST /simctl/gitops/{app}/sync", s.simGitOpsSync)
-	s.mux.HandleFunc("POST /simctl/gitops/{app}/fail-next-sync", s.simFailNextSync)
-	s.mux.HandleFunc("POST /simctl/audit-sink", s.simAuditSink)
 
 	// Data fidelity (D1–D8).
-	s.mux.HandleFunc("POST /simctl/databases/{app}/{datastore}", s.simSeedDatabase)
-	s.mux.HandleFunc("POST /simctl/fail-migration", s.simFailMigration)
 	s.mux.HandleFunc("POST /v1/applications/{app}/datastores/{datastore}/profile", s.profileDatastore)
 	s.mux.HandleFunc("PUT /v1/applications/{app}/real-data", s.enableRealData)
 }
