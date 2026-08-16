@@ -65,3 +65,83 @@ class KubeClusterPage:
 
     def namespace_exists(self, namespace):
         return self._kubectl("get", "namespace", namespace).returncode == 0
+
+    def server_minor(self):
+        result = self._kubectl("version", "-o", "json")
+        result.check_returncode()
+        server = json.loads(result.stdout)["serverVersion"]
+        return "%s.%s" % (server["major"], server["minor"].rstrip("+"))
+
+    # --- real substrate arrangement (installed with kubectl, the way a
+    # platform team installs an operator; not a simulated surface) ---
+
+    OPERATOR_MANIFESTS = """\
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: widgets.widgets.example.com
+spec:
+  group: widgets.example.com
+  scope: Namespaced
+  names: {plural: widgets, singular: widget, kind: Widget, listKind: WidgetList}
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema: {type: object, x-kubernetes-preserve-unknown-fields: true}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: operators
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: widget-operator
+  namespace: operators
+  labels:
+    app.kubernetes.io/component: operator
+    app.kubernetes.io/name: widget-operator
+    app.kubernetes.io/version: "%(version)s"
+  annotations:
+    cloudbox.dev/owns-crds: widgets.example.com
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: widget-operator}
+  template:
+    metadata:
+      labels: {app: widget-operator}
+    spec:
+      containers:
+        - name: operator
+          image: busybox:1.36
+          command: ["sh", "-c", "sleep 1000000000"]
+"""
+
+    def install_widget_operator(self, version="v1.0.0"):
+        """Install a real operator: its CRD group plus a labeled Deployment.
+        Idempotent; re-applying resets the version label."""
+        result = subprocess.run(
+            ["kubectl", "--context", self.name, "apply", "-f", "-"],
+            input=self.OPERATOR_MANIFESTS % {"version": version},
+            capture_output=True, text=True, timeout=120,
+        )
+        result.check_returncode()
+
+    def widget_operator_version(self):
+        result = self._kubectl(
+            "get", "deployment", "widget-operator", "-n", "operators",
+            "-o", "jsonpath={.metadata.labels.app\\.kubernetes\\.io/version}",
+        )
+        result.check_returncode()
+        return result.stdout.strip()
+
+    def set_widget_operator_version(self, version):
+        result = self._kubectl(
+            "label", "deployment", "widget-operator", "-n", "operators",
+            "app.kubernetes.io/version=%s" % version, "--overwrite",
+        )
+        result.check_returncode()

@@ -39,6 +39,18 @@ def sha256_digest(yaml_text):
     return "sha256:" + hashlib.sha256(yaml_text.encode()).hexdigest()
 
 
+# References the widget-operator's CRD group so the substrate lockfile scopes
+# to that operator (P1); used by the real-cluster substrate scenario.
+WIDGET_BUNDLE_YAML = """\
+apiVersion: widgets.example.com/v1
+kind: Widget
+metadata:
+  name: sample-widget
+spec:
+  size: small
+"""
+
+
 class BundlesPage:
     def __init__(self, api):
         self._api = api

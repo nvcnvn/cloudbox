@@ -5,6 +5,8 @@ import uuid
 
 from behave import given, when, then
 
+from pages.bundles import WIDGET_BUNDLE_YAML
+
 PRODUCT_CRDS = {
     "applications.cloudbox.dev",
     "sandboxes.cloudbox.dev",
@@ -141,6 +143,66 @@ def step_impl(context):
 def step_impl(context):
     vendor = context.kube.vendor_policy_objects(context.sandbox_name)
     assert not vendor, "vendor policy objects present in the namespace: %s" % vendor
+
+
+# --- Rule: The substrate is read from the live cluster ---
+
+
+@given("a real cluster with a known Kubernetes minor version and installed operators")
+def step_impl(context):
+    assert context.kube.reachable(), "conformance cluster unreachable"
+    context.kube.install_widget_operator(version="v1.0.0")
+
+
+@when("the application substrate is inspected through the driver")
+def step_impl(context):
+    create_sealed_sandbox(context)
+    # The lockfile scopes to what the application's bundles reference (P1),
+    # so apply a bundle instantiating the operator's CRD group.
+    context.bundles.apply(context.app_name, context.sandbox_name, WIDGET_BUNDLE_YAML)
+    context.bundles.last_response.raise_for_status()
+    context.lockfile = context.platform.lockfile(context.app_name)
+
+
+@then("the reported minor version and components match the live cluster")
+def step_impl(context):
+    live_minor = context.kube.server_minor()
+    assert context.lockfile["kubernetesMinor"] == live_minor, (
+        "lockfile reports minor %r, live cluster is %r"
+        % (context.lockfile["kubernetesMinor"], live_minor)
+    )
+    operators = {
+        c["name"]: c for c in context.lockfile["components"] if c["kind"] == "operator"
+    }
+    assert "widget-operator" in operators, (
+        "widget-operator missing from lockfile components: %s" % sorted(operators)
+    )
+    live_version = context.kube.widget_operator_version()
+    assert operators["widget-operator"]["version"] == live_version, (
+        "lockfile reports operator version %r, live cluster label is %r"
+        % (operators["widget-operator"]["version"], live_version)
+    )
+
+
+@then("the substrate digest is computed from those live values")
+def step_impl(context):
+    before = context.lockfile["digest"]
+    assert before, "lockfile digest is empty"
+    # Change a live value; a digest computed from live state must move.
+    context.kube.set_widget_operator_version("v1.1.0")
+    try:
+        after = context.platform.lockfile(context.app_name)
+        assert after["digest"] != before, (
+            "digest did not change after the live operator version changed"
+        )
+        versions = {
+            c["name"]: c["version"] for c in after["components"] if c["kind"] == "operator"
+        }
+        assert versions.get("widget-operator") == "v1.1.0", (
+            "lockfile did not pick up the live version change: %s" % versions
+        )
+    finally:
+        context.kube.set_widget_operator_version("v1.0.0")
 
 
 # --- Rule: The simulation arrangement surface is absent under the kube driver ---
