@@ -58,3 +58,55 @@ jobs:
           name: acceptance-report
           path: acceptance-tests/reports/behave-report.html
           if-no-files-found: error
+
+  # The conformance subset against real Kind clusters (ADR 0008). Two
+  # clusters: the Calico-enforcing target, and the deliberately non-enforcing
+  # flannel cluster the probe-failure and gate scenarios assert against
+  # (hack/conformance/kind-nonenforcing.sh). A failure anywhere fails the
+  # check — no continue-on-error, no retries.
+  conformance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install pinned kind and kubectl
+        run: |
+          sudo curl -sLo /usr/local/bin/kind https://kind.sigs.k8s.io/dl/v0.32.0/kind-linux-amd64
+          sudo chmod +x /usr/local/bin/kind
+          sudo curl -sLo /usr/local/bin/kubectl https://dl.k8s.io/release/v1.36.1/bin/linux/amd64/kubectl
+          sudo chmod +x /usr/local/bin/kubectl
+
+      - name: Set up the acceptance venv
+        run: |
+          python -m venv acceptance-tests/.venv
+          acceptance-tests/.venv/bin/pip install -r acceptance-tests/requirements.txt
+
+      - name: Conformance subset (provisions both Kind clusters)
+        run: make conformance
+
+      - name: Enforcement gate refuses the non-enforcing cluster
+        run: |
+          cd acceptance-tests
+          if KUBECONFIG="$PWD/.kube/merged.kubeconfig" \
+             CLOUDBOX_KUBE_CONTEXT=kind-cloudbox-nonenforcing \
+             CLOUDBOX_KUBE_NONENFORCING_CONTEXT=kind-cloudbox-nonenforcing \
+             .venv/bin/python run_acceptance.py --conformance; then
+            echo "the conformance run reported a pass on a non-enforcing cluster" >&2
+            exit 1
+          fi
+
+      - name: Publish the conformance HTML report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: conformance-report
+          path: acceptance-tests/reports/behave-report.html
+          if-no-files-found: warn

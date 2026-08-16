@@ -45,7 +45,7 @@ effective suite, so the default run is red until 1.1 lands. Do this first.
 ## 4. Enforcement gate and the non-enforcing cluster
 
 - [x] 4.1 conformance-ci: a conformance run gates on proven NetworkPolicy enforcement — passes on an enforcing cluster, fails naming unproven enforcement otherwise, and reports no pass in that case — red → green → commit
-- [ ] 4.2 Provision the deliberately non-enforcing Kind cluster in CI that tasks 3.8 and 4.1 assert against. Resolves design Open Question 3 (stock default CNI versus an enforcing CNI with policy disabled)
+- [x] 4.2 Provision the deliberately non-enforcing Kind cluster in CI that tasks 3.8 and 4.1 assert against. Resolves design Open Question 3 (stock default CNI versus an enforcing CNI with policy disabled)
 
 ## 5. Real-clock timing and the full integration check
 
