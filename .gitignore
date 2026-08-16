@@ -5,6 +5,7 @@ draft.md
 acceptance-tests/.extracted/
 acceptance-tests/reports/
 acceptance-tests/.venv/
+acceptance-tests/.kube/
 
 # Build output
 /bin/
