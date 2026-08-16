@@ -9,21 +9,29 @@ import requests
 
 
 class ApiClient:
+    """Default timeout suits the in-process sim; calls that drive a real
+    cluster (sandbox creation runs a live enforcement probe) pass a larger
+    one explicitly."""
+
     def __init__(self, base_url):
         self.base_url = base_url
         self._session = requests.Session()
 
     def get(self, path, **kwargs):
-        return self._session.get(self.base_url + path, timeout=10, **kwargs)
+        kwargs.setdefault("timeout", 10)
+        return self._session.get(self.base_url + path, **kwargs)
 
     def post(self, path, json=None, **kwargs):
-        return self._session.post(self.base_url + path, json=json, timeout=10, **kwargs)
+        kwargs.setdefault("timeout", 10)
+        return self._session.post(self.base_url + path, json=json, **kwargs)
 
     def put(self, path, json=None, **kwargs):
-        return self._session.put(self.base_url + path, json=json, timeout=10, **kwargs)
+        kwargs.setdefault("timeout", 10)
+        return self._session.put(self.base_url + path, json=json, **kwargs)
 
     def delete(self, path, **kwargs):
-        return self._session.delete(self.base_url + path, timeout=10, **kwargs)
+        kwargs.setdefault("timeout", 10)
+        return self._session.delete(self.base_url + path, **kwargs)
 
 
 class CliResult:

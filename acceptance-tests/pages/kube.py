@@ -33,3 +33,35 @@ class KubeClusterPage:
         result = self._kubectl("get", "crds", "-o", "json")
         result.check_returncode()
         return {item["metadata"]["name"] for item in json.loads(result.stdout)["items"]}
+
+    def network_policies(self, namespace):
+        """Standard NetworkPolicy v1 objects in the namespace, as the cluster
+        stores them."""
+        result = self._kubectl("get", "networkpolicies", "-n", namespace, "-o", "json")
+        result.check_returncode()
+        return json.loads(result.stdout)["items"]
+
+    def vendor_policy_objects(self, namespace):
+        """Instances of vendor policy CRDs (Calico/Cilium) in the namespace —
+        the seal must use none (ADR 0001)."""
+        found = []
+        crds = self._kubectl("get", "crds", "-o", "json")
+        crds.check_returncode()
+        for item in json.loads(crds.stdout)["items"]:
+            group = item["spec"]["group"]
+            if not any(vendor in group for vendor in ("projectcalico.org", "cilium.io")):
+                continue
+            if "policy" not in item["metadata"]["name"]:
+                continue
+            if item["spec"]["scope"] != "Namespaced":
+                continue
+            result = self._kubectl(
+                "get", item["metadata"]["name"], "-n", namespace, "-o", "json"
+            )
+            if result.returncode == 0:
+                for obj in json.loads(result.stdout)["items"]:
+                    found.append("%s/%s" % (item["metadata"]["name"], obj["metadata"]["name"]))
+        return found
+
+    def namespace_exists(self, namespace):
+        return self._kubectl("get", "namespace", namespace).returncode == 0

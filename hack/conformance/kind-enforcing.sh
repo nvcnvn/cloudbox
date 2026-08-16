@@ -14,6 +14,7 @@ CLUSTER=cloudbox-conformance
 KIND_PIN=v0.32.0
 NODE_IMAGE="kindest/node:v1.36.1@sha256:3489c7674813ba5d8b1a9977baea8a6e553784dab7b84759d1014dbd78f7ebd5"
 CALICO_MANIFEST="https://raw.githubusercontent.com/projectcalico/calico/v3.31.0/manifests/calico.yaml"
+CANARY_IMAGE="busybox:1.36"  # the enforcement-probe canary (internal/cluster/kube/seal.go)
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO="$(cd "$HERE/../.." && pwd)"
@@ -40,6 +41,13 @@ fi
 mkdir -p "$(dirname "$KUBECONFIG_OUT")"
 kind get kubeconfig --name "$CLUSTER" > "$KUBECONFIG_OUT"
 export KUBECONFIG="$KUBECONFIG_OUT"
+
+# Preload the probe canary image so enforcement probes never wait on a
+# registry pull mid-probe. Pulled inside the node with crictl: `kind load`
+# cannot import archives from Docker Desktop's containerd image store.
+for node in $(kind get nodes --name "$CLUSTER"); do
+  docker exec "$node" crictl pull "docker.io/library/$CANARY_IMAGE"
+done
 
 if ! kubectl get daemonset calico-node -n kube-system >/dev/null 2>&1; then
   kubectl apply -f "$CALICO_MANIFEST"

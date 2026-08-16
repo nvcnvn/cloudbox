@@ -15,8 +15,11 @@ class SandboxesPage:
         payload = {"app": app, "local": local}
         if ttl_seconds:
             payload["ttlSeconds"] = ttl_seconds
+        # Creation seals and probe-verifies the namespace; on a real cluster
+        # the probe runs live canary pods, so allow well beyond the default.
         self.last_response = self._api.post(
-            "/v1/sandboxes", json=payload, headers={"X-Cloudbox-User": owner}
+            "/v1/sandboxes", json=payload, headers={"X-Cloudbox-User": owner},
+            timeout=300,
         )
         if expect_ok:
             self.last_response.raise_for_status()
