@@ -35,7 +35,7 @@ effective suite, so the default run is red until 1.1 lands. Do this first.
 
 - [x] 3.1 Local and CI Kind setup: pin a Kind version, install an enforcing CNI, and **verify that the pinned version's default CNI does or does not enforce NetworkPolicy** rather than assuming — record the finding, since a non-enforcing default is what task 4.2 deliberately exploits. Add a `make conformance` target and kubeconfig wiring. Resolves design Open Question 2 (Calico or Cilium)
 - [x] 3.2 kube-driver: the kube driver satisfies the cluster contract without widening it — control plane boots healthy against a real cluster, product CRDs installed and listed; confirm `internal/cluster/cluster.go` is byte-identical to its pre-change state — red → green → commit
-- [ ] 3.3 kube-driver: the simulation arrangement surface is absent under the kube driver — red → green → commit
+- [x] 3.3 kube-driver: the simulation arrangement surface is absent under the kube driver — red → green → commit
 - [ ] 3.4 kube-driver: the substrate is read from the live cluster, so substrate digests reflect what is actually installed (ADR 0006) — red → green → commit
 - [ ] 3.5 kube-driver: real workload readiness reported from cluster status, and a memory-limit kill reported as out-of-memory with capacity-squeeze-incompatible diagnostics — red → green → commit
 - [ ] 3.6 kube-driver: sealing a real namespace installs standard NetworkPolicy v1 admitting only cluster DNS and the egress proxy, with no vendor policy CRDs (ADR 0001) — red → green → commit

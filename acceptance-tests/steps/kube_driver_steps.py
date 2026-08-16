@@ -65,3 +65,21 @@ def step_impl(context):
     listed = {crd["name"] for crd in context.platform.installed_crds(context.kube.name)}
     missing = PRODUCT_CRDS - listed
     assert not missing, "driver listing lacks installed CRDs: %s" % sorted(missing)
+
+
+# --- Rule: The simulation arrangement surface is absent under the kube driver ---
+
+
+@when("a simulation arrangement route is requested")
+def step_impl(context):
+    context.sim_arrangement_responses = context.platform.request_sim_arrangements()
+
+
+@then("the request is not served")
+def step_impl(context):
+    served = [
+        "%s -> %d" % (r.request.url, r.status_code)
+        for r in context.sim_arrangement_responses
+        if r.status_code != 404
+    ]
+    assert not served, "simulation arrangement routes served under kube: %s" % served

@@ -20,6 +20,15 @@ class PlatformPage:
     def healthy(self):
         return self._api.get("/healthz").ok
 
+    def request_sim_arrangements(self):
+        """Hit representative routes of the sim driver's test-arrangement
+        surface; returns the responses (ADR 0008: never served under kube)."""
+        return [
+            self._api.post("/simctl/reset"),
+            self._api.post("/simctl/clusters", json={"name": "conjured"}),
+            self._api.post("/simctl/advance-time", json={"seconds": 60}),
+        ]
+
     def ensure_cluster(self, name, enforcing=True):
         self._api.post("/simctl/clusters", json={"name": name, "enforcing": enforcing}).raise_for_status()
         return name
