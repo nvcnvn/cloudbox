@@ -5,6 +5,7 @@ import time
 
 from behave import given, when, then
 
+from pages.bundles import SHORTNAME_NO_SERVICE_YAML, SHORTNAME_WITH_SERVICE_YAML
 from pages.gate import check_enforcement
 from kube_driver_steps import create_sealed_sandbox
 
@@ -256,3 +257,59 @@ def step_impl(context):
         "a failing conformance subset did not fail the check (exit=%d):\n%s"
         % (context.failing_run.returncode, context.failing_run.stderr[-2000:])
     )
+
+
+# --- Rule: A divergence between the simulation and the real driver is recorded and reconciled ---
+
+
+@given("a behaviour where the real driver contradicts the simulation")
+def step_impl(context):
+    # The flagship finding: the sim resolved in-sandbox short names against
+    # workload names; real cluster DNS resolves Service names (task 3.7).
+    records = context.sim_divergences.records()
+    context.divergence = next(
+        (r for r in records if "Service" in r["behaviour"]), None
+    )
+    assert context.divergence, (
+        "no recorded divergence covers short-name/Service resolution: %s"
+        % [r["id"] for r in records]
+    )
+
+
+@when("that divergence is reconciled")
+def step_impl(context):
+    # Exercise the corrected model in both directions on the sim.
+    context.app_name = context.applications.create("recon")["name"]
+    context.sandbox_name = context.sandboxes.create(context.app_name)
+    context.bundles.apply(context.app_name, context.sandbox_name, SHORTNAME_NO_SERVICE_YAML)
+    context.bundles.last_response.raise_for_status()
+    context.without_service = context.sandboxes.attempt_egress(
+        context.sandbox_name, "auth-api"
+    )
+    context.bundles.apply(context.app_name, context.sandbox_name, SHORTNAME_WITH_SERVICE_YAML)
+    context.bundles.last_response.raise_for_status()
+    context.with_service = context.sandboxes.attempt_egress(
+        context.sandbox_name, "auth-api"
+    )
+
+
+@then("the simulation is corrected to match the real driver")
+def step_impl(context):
+    # Real behaviour (task 3.7): no Service, no resolution; with a Service,
+    # the in-sandbox connection succeeds under the seal.
+    assert not context.without_service["allowed"], (
+        "the sim still resolves a bare workload name: %s" % context.without_service
+    )
+    assert context.with_service["allowed"] and context.with_service["via"] == "in-sandbox", (
+        context.with_service
+    )
+
+
+@then("the divergence is recorded with the behaviour that differed")
+def step_impl(context):
+    behaviour = context.divergence["behaviour"]
+    correction = context.divergence["correction"]
+    assert "sim" in behaviour and "real" in behaviour, (
+        "the record does not describe both sides of the behaviour: %r" % behaviour
+    )
+    assert correction.strip(), "the record carries no correction"

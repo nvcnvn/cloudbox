@@ -53,3 +53,13 @@ class SandboxesPage:
         resp = self._api.get("/v1/sandboxes/%s/explain" % sandbox)
         resp.raise_for_status()
         return resp.json()
+
+    def attempt_egress(self, sandbox, destination, workload="web"):
+        """Evaluate one egress attempt through the sim's arrangement surface
+        (sim driver only; the kube driver never serves this route)."""
+        resp = self._api.post(
+            "/simctl/sandboxes/%s/egress-attempts" % sandbox,
+            json={"workload": workload, "destination": destination},
+        )
+        resp.raise_for_status()
+        return resp.json()

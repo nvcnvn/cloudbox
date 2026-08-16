@@ -2,12 +2,20 @@
 
 from behave import given, when, then
 
+# Short names resolve through Services (cluster DNS resolves Services, not
+# workloads — sim DIVERGENCES.md entry 1), so a realistic bundle declares them.
 TWO_SERVICES = (
     "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: web\n"
     "spec:\n  template:\n    spec:\n      containers:\n        - name: web\n          image: web:1.0\n"
     "---\n"
+    "apiVersion: v1\nkind: Service\nmetadata:\n  name: web\n"
+    "spec:\n  ports:\n    - port: 80\n"
+    "---\n"
     "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: auth-api\n"
     "spec:\n  template:\n    spec:\n      containers:\n        - name: auth-api\n          image: auth:1.0\n"
+    "---\n"
+    "apiVersion: v1\nkind: Service\nmetadata:\n  name: auth-api\n"
+    "spec:\n  ports:\n    - port: 80\n"
 )
 
 NETPOL_WIDENING = (

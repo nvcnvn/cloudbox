@@ -1,0 +1,17 @@
+# Sim divergence record
+
+Where the kube driver's observed behaviour contradicts the simulation, the
+simulation is corrected to match the real driver and the divergence is
+recorded here with the behaviour that differed (conformance-ci, ADR 0008 —
+the obligation ADR 0007 asserted). An uncorrected divergence is never left
+silent: the sim's fidelity bounds what the whole suite can prove.
+
+Each row records what the sim did, what the real driver was observed to do,
+and the correction made.
+
+| # | Behaviour that differed | Correction |
+|---|---|---|
+| 1 | In-sandbox short-name resolution: the sim allowed a connection to any same-namespace WORKLOAD name; the real driver (Kind + Calico, task 3.7) showed cluster DNS resolves SERVICE names — a bare Deployment name does not resolve, and the connection succeeds only when a Service object of that name exists. | `world.go` now resolves short names against Service objects in the namespace, and the sim two-services fixture declares the Service objects a real bundle needs. |
+| 2 | Admitted non-workload objects: the sim suite passed while Services, ConfigMaps and custom resources in a bundle never reached the cluster at all — the control plane admitted only workload kinds; the real driver showed those objects must exist on-cluster (DNS resolution, CRs) for the bundle to function. | `core.Apply` now applies every admitted non-workload object through the driver; the sim world stores them, which is what made correction 1 expressible. |
+| 3 | Readiness and OOM timing: the sim reports a workload ready (or arranged-OOM-killed) synchronously at admission; the real driver reports both asynchronously from cluster status, seconds after admission. | The contract surface is reconciled on reads: the control plane folds cluster-observed readiness/OOM state and diagnostics into the sandbox record when it is inspected (task 3.5). The sim's admission-time statuses stand as the time-collapsed model of the same observations. |
+| 4 | Transparent redirection (ADR 0001): the sim's egress model implies every allowlisted attempt is transparently redirected through the egress proxy regardless of protocol; the real v1 driver redirects nothing — only proxy-aware HTTP workloads reach the proxy (http_proxy env-var fallback, injected at admission), and a DIRECT connection even to an allowlisted destination is denied by the CNI. | The distinction is not expressible through the frozen contract's `AttemptEgress(namespace, destination)`, so the sim's abstract attempt is documented as proxy-mediated (the env-var fallback path the real subset proves in task 3.7); transparent pod-level redirection remains ADR 0001's roadmap mechanism and is not modelled as already real. |

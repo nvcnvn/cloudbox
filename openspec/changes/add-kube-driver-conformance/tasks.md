@@ -54,7 +54,7 @@ effective suite, so the default run is red until 1.1 lands. Do this first.
 
 ## 6. Sim reconciliation
 
-- [ ] 6.1 conformance-ci: a divergence between the simulation and the real driver is recorded and reconciled — correct `internal/sim/world.go` to match observed real behaviour and record each divergence with the behaviour that differed; expect the first findings around ADR 0001's transparent redirection — red → green → commit
+- [x] 6.1 conformance-ci: a divergence between the simulation and the real driver is recorded and reconciled — correct `internal/sim/world.go` to match observed real behaviour and record each divergence with the behaviour that differed; expect the first findings around ADR 0001's transparent redirection — red → green → commit
 
 ## 7. Completion
 

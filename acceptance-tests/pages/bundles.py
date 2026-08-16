@@ -50,6 +50,43 @@ spec:
   size: small
 """
 
+# The sim-reconciliation scenario's pair: the same two workloads with and
+# without the Service that real cluster DNS needs (sim DIVERGENCES.md #1).
+SHORTNAME_NO_SERVICE_YAML = """\
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+spec:
+  template:
+    spec:
+      containers:
+        - name: web
+          image: web:1.0
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth-api
+spec:
+  template:
+    spec:
+      containers:
+        - name: auth-api
+          image: auth:1.0
+"""
+
+SHORTNAME_WITH_SERVICE_YAML = SHORTNAME_NO_SERVICE_YAML + """\
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: auth-api
+spec:
+  ports:
+    - port: 80
+"""
+
 # Real-cluster workload bundles (@conformance): runnable images, since these
 # pods actually start. The pod label app=<name> is how the driver attributes
 # pod-level evidence (OOM kills) to the admitted workload.

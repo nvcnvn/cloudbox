@@ -240,11 +240,12 @@ func (c *SimCluster) AttemptEgress(namespace, destination string) cluster.Egress
 		return cluster.EgressResult{Allowed: true, Via: "cluster-dns"}
 	}
 	if !strings.Contains(destination, ".") {
-		// Same-namespace short name: reachable if such a workload exists.
-		for _, w := range ns.workloads {
-			if w.Name == destination {
-				return cluster.EgressResult{Allowed: true, Via: "in-sandbox"}
-			}
+		// Same-namespace short name: reachable only through a Service of
+		// that name. Cluster DNS resolves Services, not workloads — observed
+		// on the real driver and reconciled here (DIVERGENCES.md entry 1);
+		// the sim previously resolved workload names directly.
+		if _, ok := c.rawObjects[rawKey(namespace, "Service", destination)]; ok {
+			return cluster.EgressResult{Allowed: true, Via: "in-sandbox"}
 		}
 		return cluster.EgressResult{Allowed: false, Via: "denied"}
 	}
