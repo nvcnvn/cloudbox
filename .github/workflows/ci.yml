@@ -1,0 +1,60 @@
+# The repository's continuous-integration contract (conformance-ci capability):
+# every proposed change is checked by compiling both binaries, vetting the
+# sources, linting the extracted specifications, and running the full
+# simulation suite. The conformance subset against Kind with an enforcing CNI
+# is the remaining required stage (ADR 0008); it is added by task 5.2 of
+# add-kube-driver-conformance.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Vet the sources
+        run: go vet ./...
+
+      - name: Build both binaries
+        run: make build
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up the acceptance venv
+        run: |
+          python -m venv acceptance-tests/.venv
+          acceptance-tests/.venv/bin/pip install -r acceptance-tests/requirements.txt
+
+      # npx would prompt-install gherkin-lint on first use; install it
+      # explicitly so the lint stage is deterministic.
+      - name: Install gherkin-lint
+        run: npm install -g gherkin-lint
+
+      - name: Lint the extracted specifications
+        run: make lint-specs
+
+      - name: Full simulation suite (effective spec)
+        run: make acceptance
+
+      - name: Publish the HTML report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: acceptance-report
+          path: acceptance-tests/reports/behave-report.html
+          if-no-files-found: error

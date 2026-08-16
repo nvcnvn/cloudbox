@@ -29,7 +29,7 @@ effective suite, so the default run is red until 1.1 lands. Do this first.
 
 ## 2. Continuous integration foundation
 
-- [ ] 2.1 Add the GitHub Actions pull-request workflow — the repository's first CI — running `go vet ./...`, `make build`, `make lint-specs`, and the full sim suite, publishing the HTML report as an artifact. The conformance stage is added in 5.2, which is where the corresponding spec Rule goes green; do not mark that Rule complete here
+- [x] 2.1 Add the GitHub Actions pull-request workflow — the repository's first CI — running `go vet ./...`, `make build`, `make lint-specs`, and the full sim suite, publishing the HTML report as an artifact. The conformance stage is added in 5.2, which is where the corresponding spec Rule goes green; do not mark that Rule complete here
 
 ## 3. Kube driver behind the frozen contract
 
