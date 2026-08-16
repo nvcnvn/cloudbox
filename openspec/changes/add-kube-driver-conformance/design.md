@@ -169,21 +169,45 @@ The default sim run never depends on any of it.
 
 ## Open Questions
 
+All resolved during implementation.
+
 1. **ADR 0007 needs superseding.** Its final consequence reads "The kube driver
    is deliberately unimplemented until the sim-verified contracts hold;
    `cloudboxd --driver kube` fails loudly today." This change makes that false.
    The `adr` step should record a new ADR superseding 0007 rather than editing
    it — carrying forward everything else in 0007, which remains correct.
+   *Resolved:* ADR 0008 supersedes 0007; 0007's file is left frozen.
 2. **Calico or Cilium?** Cilium offers DNS-aware policy, which ADR 0001 names as
    a MAY for compiling the allowlist to native policy; choosing it might make
    that MAY cheap to explore later, at the cost of a heavier CI install than
    Calico.
+   *Resolved (task 3.1):* Calico v3.31.0 — single-manifest install, lighter CI
+   footprint; the DNS-aware MAY stays open and revisiting the CNI is cheap if
+   it is ever picked up. Rationale in `hack/conformance/README.md`.
 3. **How is the non-enforcing cluster built** — stock Kind with its default CNI
    (if that version does not enforce), or an enforcing CNI with policy
    deliberately disabled? The second is more explicit and less
    version-dependent, but more setup.
+   *Resolved (tasks 3.1, 4.2):* explicit, not stock — kind v0.32.0's default
+   kindnetd was verified to ENFORCE NetworkPolicy, so stock Kind cannot serve;
+   `kind-nonenforcing.sh` disables the default CNI and installs flannel
+   v0.27.4, verified to accept-and-ignore policy objects.
 4. **Flake policy for the conformance job**: does a real-cluster scenario get a
    retry, and if so, is the retry recorded so a flaky pass is not read as a
    clean one?
+   *Resolved:* no retries in this change. A real-cluster scenario runs once;
+   any flake fails the check loudly (the CI job swallows no exit code, which
+   the "failing conformance subset fails the check" scenario asserts). If
+   flakiness materializes in practice, the sanctioned follow-up is a
+   recorded retry — visible in the report, never silent — as a new change.
 5. **Does the egress proxy need a different deployment shape under `kube`** than
    the sim models, and if so is that a sim correction or a product change?
+   *Resolved (task 3.7):* a product mechanism, not a sim correction. Under
+   `kube` the proxy is a per-sandbox-namespace Deployment+Service installed at
+   seal time, its allowlist carried by a ConfigMap the re-seal updates, and
+   workloads reach it through ADR 0001's env-var fallback injected at
+   admission. The sim's abstract egress attempt is documented as
+   proxy-mediated; the one genuine sim-model divergence here — transparent
+   redirection treated as already real — is recorded as
+   `internal/sim/DIVERGENCES.md` entry 4, with transparent pod-level
+   redirection remaining ADR 0001's roadmap mechanism.

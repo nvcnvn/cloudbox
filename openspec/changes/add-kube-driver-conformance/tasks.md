@@ -58,8 +58,8 @@ effective suite, so the default run is red until 1.1 lands. Do this first.
 
 ## 7. Completion
 
-- [ ] 7.1 Default run green: `make acceptance` passes with zero pending or undefined steps and an HTML report under `acceptance-tests/reports/`, and no conformance-tagged scenario is attempted or reported as a failure
-- [ ] 7.2 Conformance run green: the tagged subset passes against Kind with an enforcing CNI, and the enforcement gate is verified in both directions against the non-enforcing cluster
-- [ ] 7.3 Frozen-contract check: `internal/cluster/cluster.go` is unchanged by this change; every `/simctl/*` route is still unreachable under `--driver kube`
-- [ ] 7.4 Verify the composition: `.extracted/` rebuilt, nothing loaded from `openspec/changes/archive/`, no duplicate scenarios across the two active changes, composition report clean
-- [ ] 7.5 Resolve or explicitly carry forward design Open Questions 4 (conformance flake and retry policy) and 5 (egress proxy deployment shape under kube — sim correction or product change)
+- [x] 7.1 Default run green: `make acceptance` passes with zero pending or undefined steps and an HTML report under `acceptance-tests/reports/`, and no conformance-tagged scenario is attempted or reported as a failure
+- [x] 7.2 Conformance run green: the tagged subset passes against Kind with an enforcing CNI, and the enforcement gate is verified in both directions against the non-enforcing cluster
+- [x] 7.3 Frozen-contract check: `internal/cluster/cluster.go` is unchanged by this change; every `/simctl/*` route is still unreachable under `--driver kube`
+- [x] 7.4 Verify the composition: `.extracted/` rebuilt, nothing loaded from `openspec/changes/archive/`, no duplicate scenarios across the two active changes, composition report clean
+- [x] 7.5 Resolve or explicitly carry forward design Open Questions 4 (conformance flake and retry policy) and 5 (egress proxy deployment shape under kube — sim correction or product change)
