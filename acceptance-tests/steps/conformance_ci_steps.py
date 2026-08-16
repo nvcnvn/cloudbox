@@ -2,6 +2,8 @@
 
 from behave import given, when, then
 
+from pages.gate import check_enforcement
+
 
 # --- Rule: The default acceptance run excludes conformance-tagged scenarios ---
 
@@ -58,6 +60,58 @@ def step_impl(context):
     assert not untagged, (
         "the conformance run selected untagged scenarios: %s" % sorted(untagged)
     )
+
+
+# --- Rule: A conformance run gates on proven NetworkPolicy enforcement ---
+#
+# The gate's logic (pages/gate.py) is exercised here in both directions; a
+# real conformance run executes the same gate in before_all against the real
+# target cluster, so these scenarios and the live gate cannot drift apart.
+
+
+@given("a real cluster whose CNI enforces NetworkPolicy")
+def step_impl(context):
+    if context.driver == "kube":
+        context.gate_target = context.kube.name
+        return
+    context.gate_target = context.platform.ensure_cluster("enforcing-target", enforcing=True)
+
+
+@given("a real cluster whose CNI does not enforce NetworkPolicy")
+def step_impl(context):
+    if context.driver == "kube":
+        context.gate_target = context.kube_nonenforcing.name
+        return
+    context.gate_target = context.platform.ensure_cluster(
+        "nonenforcing-target", enforcing=False
+    )
+
+
+@when("the conformance run checks its enforcement precondition")
+def step_impl(context):
+    context.gate_passed, context.gate_message = check_enforcement(
+        context.api, context.gate_target
+    )
+
+
+@then("the precondition passes and the run proceeds")
+def step_impl(context):
+    assert context.gate_passed, (
+        "the enforcement precondition failed: %s" % context.gate_message
+    )
+
+
+@then("the run fails naming unproven network policy enforcement")
+def step_impl(context):
+    assert not context.gate_passed, "the gate passed on a non-enforcing cluster"
+    assert "unproven network policy enforcement" in context.gate_message, (
+        context.gate_message
+    )
+
+
+@then("the run reports no conformance pass")
+def step_impl(context):
+    assert "no conformance pass" in context.gate_message, context.gate_message
 
 
 # --- Rule: Scenarios the real run cannot honestly prove are excluded and recorded ---

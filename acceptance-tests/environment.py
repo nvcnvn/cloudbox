@@ -96,6 +96,21 @@ def before_all(context):
             raise RuntimeError("cloudboxd did not become healthy before the deadline")
         time.sleep(0.1)
 
+    if context.driver == "kube":
+        # The enforcement gate (conformance-ci): before reporting any
+        # conformance result, prove the target cluster actually enforces
+        # NetworkPolicy. An unproven cluster aborts the run — a vacuous pass
+        # must be impossible.
+        from pages.client import ApiClient
+        from pages.gate import check_enforcement
+        from pages.kube import KubeClusterPage
+
+        target = KubeClusterPage().name
+        passed, message = check_enforcement(ApiClient(context.base_url), target)
+        if not passed:
+            context.app.terminate()
+            raise RuntimeError(message)
+
 
 def after_all(context):
     app = getattr(context, "app", None)
