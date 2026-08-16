@@ -50,6 +50,57 @@ spec:
   size: small
 """
 
+# Real-cluster workload bundles (@conformance): runnable images, since these
+# pods actually start. The pod label app=<name> is how the driver attributes
+# pod-level evidence (OOM kills) to the admitted workload.
+READY_WORKLOAD_YAML = """\
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  labels: {app: web}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: web}
+  template:
+    metadata:
+      labels: {app: web}
+    spec:
+      containers:
+        - name: web
+          image: busybox:1.36
+          command: ["sh", "-c", "sleep 1000000000"]
+          resources:
+            requests: {cpu: 50m, memory: 32Mi}
+            limits: {cpu: 100m, memory: 128Mi}
+"""
+
+# Declares a 128Mi limit the squeezed transform halves to the 64Mi floor,
+# then allocates ~100Mi: the kernel OOM-kills it under the squeeze.
+MEMORY_HOG_YAML = """\
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hog
+  labels: {app: hog}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: hog}
+  template:
+    metadata:
+      labels: {app: hog}
+    spec:
+      containers:
+        - name: hog
+          image: busybox:1.36
+          command: ["sh", "-c", "head -c 100m /dev/zero | tail; sleep 1000000000"]
+          resources:
+            requests: {cpu: 50m, memory: 32Mi}
+            limits: {cpu: 100m, memory: 128Mi}
+"""
+
 
 class BundlesPage:
     def __init__(self, api):

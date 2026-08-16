@@ -1,11 +1,12 @@
 """Steps for the kube-driver capability (@conformance: every scenario runs
 against a real cluster, booted by run_acceptance.py --conformance)."""
 
+import time
 import uuid
 
 from behave import given, when, then
 
-from pages.bundles import WIDGET_BUNDLE_YAML
+from pages.bundles import MEMORY_HOG_YAML, READY_WORKLOAD_YAML, WIDGET_BUNDLE_YAML
 
 PRODUCT_CRDS = {
     "applications.cloudbox.dev",
@@ -203,6 +204,66 @@ def step_impl(context):
         )
     finally:
         context.kube.set_widget_operator_version("v1.0.0")
+
+
+# --- Rule: Real workload readiness and squeeze failure are observed, not simulated ---
+
+
+def wait_for_workload(context, name, predicate, timeout=180):
+    """Poll the product's workload listing until the cluster-observed state
+    satisfies the predicate."""
+    deadline = time.time() + timeout
+    last = None
+    while time.time() < deadline:
+        workloads = {w["name"]: w for w in context.sandboxes.workloads(context.sandbox_name)}
+        last = workloads.get(name)
+        if last and predicate(last):
+            return last
+        time.sleep(2)
+    raise AssertionError(
+        "workload %r never reached the expected state; last observed: %r" % (name, last)
+    )
+
+
+@when("a bundle whose workload starts successfully is applied")
+def step_impl(context):
+    context.bundles.apply(context.app_name, context.sandbox_name, READY_WORKLOAD_YAML)
+    context.bundles.last_response.raise_for_status()
+    context.workload_name = "web"
+
+
+@then("the driver reports the workload ready from the cluster's status")
+def step_impl(context):
+    wait_for_workload(context, context.workload_name, lambda w: w["ready"])
+
+
+@when("a workload is applied that exceeds its memory limit under the squeezed capacity transform")
+def step_impl(context):
+    context.bundles.apply_options(
+        context.app_name, context.sandbox_name, MEMORY_HOG_YAML, capacity_mode="squeezed"
+    )
+    context.bundles.last_response.raise_for_status()
+    context.workload_name = "hog"
+
+
+@then("the driver reports that workload out-of-memory")
+def step_impl(context):
+    wait_for_workload(context, context.workload_name, lambda w: w["oomKilled"])
+
+
+@then("the sandbox surfaces capacity-squeeze-incompatible diagnostics")
+def step_impl(context):
+    record = context.sandboxes.record(context.sandbox_name)
+    record.raise_for_status()
+    diagnostics = record.json().get("diagnostics") or []
+    matching = [
+        d for d in diagnostics
+        if d["code"] == "capacity-squeeze-incompatible"
+        and d.get("workload") == context.workload_name
+    ]
+    assert matching, "no capacity-squeeze-incompatible diagnostic for %r: %s" % (
+        context.workload_name, diagnostics,
+    )
 
 
 # --- Rule: The simulation arrangement surface is absent under the kube driver ---

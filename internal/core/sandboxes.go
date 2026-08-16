@@ -256,6 +256,7 @@ func (c *Core) GetSandbox(name string) (*Sandbox, error) {
 	if !ok {
 		return nil, errf(404, "sandbox %q is not known", name)
 	}
+	c.refreshObservedDiagnosticsLocked(sb)
 	return sb, nil
 }
 
@@ -271,5 +272,42 @@ func (c *Core) SandboxWorkloads(name string) ([]cluster.Workload, error) {
 	if !ok {
 		return nil, nil
 	}
+	c.refreshObservedDiagnosticsLocked(sb)
 	return host.Workloads(sb.Namespace), nil
+}
+
+// refreshObservedDiagnosticsLocked folds cluster-observed workload failures
+// into the sandbox record. The sim driver's arranged OOM kills are recorded
+// at admission; on a real cluster the kill happens after admission and only
+// the cluster's own status shows it (ADR 0008), so reads reconcile the
+// record with what the driver observes. Deduplicated by workload, so the
+// sim's admission-time diagnostics never double up. Callers hold c.mu.
+func (c *Core) refreshObservedDiagnosticsLocked(sb *Sandbox) {
+	if sb.State == "destroyed" || sb.CapacityMode == "" || sb.CapacityMode == "full" {
+		return
+	}
+	host, ok := c.driver.Cluster(sb.Cluster)
+	if !ok {
+		return
+	}
+	for _, w := range host.Workloads(sb.Namespace) {
+		if !w.OOMKilled {
+			continue
+		}
+		recorded := false
+		for _, d := range sb.Diagnostics {
+			if d.Code == "capacity-squeeze-incompatible" && d.Workload == w.Name {
+				recorded = true
+			}
+		}
+		if !recorded {
+			sb.Diagnostics = append(sb.Diagnostics, Diagnostic{
+				Code:     "capacity-squeeze-incompatible",
+				Workload: w.Name,
+				Message: fmt.Sprintf(
+					"workload %q was OOM-killed under the %s capacity transform; its memory floor is below what the workload needs — configure capacity: full for this application",
+					w.Name, sb.CapacityMode),
+			})
+		}
+	}
 }
