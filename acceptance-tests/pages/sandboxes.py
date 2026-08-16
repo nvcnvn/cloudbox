@@ -40,9 +40,14 @@ class SandboxesPage:
         )
 
     def evidence(self, sandbox):
-        resp = self._api.get("/v1/sandboxes/%s/evidence" % sandbox)
+        resp = self.evidence_response(sandbox)
         resp.raise_for_status()
         return resp.json()
+
+    def evidence_response(self, sandbox):
+        """The raw evidence response — for scenarios asserting that evidence
+        is refused."""
+        return self._api.get("/v1/sandboxes/%s/evidence" % sandbox)
 
     def explain(self, sandbox):
         resp = self._api.get("/v1/sandboxes/%s/explain" % sandbox)

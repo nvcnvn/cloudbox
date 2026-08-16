@@ -40,7 +40,7 @@ effective suite, so the default run is red until 1.1 lands. Do this first.
 - [x] 3.5 kube-driver: real workload readiness reported from cluster status, and a memory-limit kill reported as out-of-memory with capacity-squeeze-incompatible diagnostics — red → green → commit
 - [x] 3.6 kube-driver: sealing a real namespace installs standard NetworkPolicy v1 admitting only cluster DNS and the egress proxy, with no vendor policy CRDs (ADR 0001) — red → green → commit
 - [x] 3.7 kube-driver: a real workload's blocked egress is denied by the cluster and recorded with destination and attribution; allowlisted destinations reachable through the proxy; in-sandbox traffic and cluster DNS survive the seal — assert through the product's own blocked-egress surface, not a test endpoint (ADR 0008) — red → green → commit
-- [ ] 3.8 kube-driver: a non-enforcing CNI fails the probe — sandbox not reported sealed, no evidence emitted, cause names unenforced network policy — red → green → commit
+- [x] 3.8 kube-driver: a non-enforcing CNI fails the probe — sandbox not reported sealed, no evidence emitted, cause names unenforced network policy — red → green → commit
 
 ## 4. Enforcement gate and the non-enforcing cluster
 

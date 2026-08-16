@@ -29,3 +29,4 @@ def attach(context):
     context.runner = RunnerPage()
     context.conformance_subset = ConformanceSubsetPage()
     context.kube = KubeClusterPage()
+    context.kube_nonenforcing = KubeClusterPage.nonenforcing()

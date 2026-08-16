@@ -18,12 +18,18 @@ acceptance-specs:
 lint-specs:
 	cd acceptance-tests && .venv/bin/python run_acceptance.py --lint
 
-# The @conformance subset against a real Kind cluster with an enforcing CNI
-# (ADR 0008). Provisioning is idempotent; the kubeconfig lands under
-# acceptance-tests/.kube/ (gitignored).
+# The @conformance subset against real Kind clusters (ADR 0008): the
+# enforcing target plus the deliberately non-enforcing cluster the
+# probe-failure and gate scenarios assert against. Provisioning is
+# idempotent; kubeconfigs land under acceptance-tests/.kube/ (gitignored) and
+# are merged so the driver sees both contexts.
 conformance:
 	@mkdir -p acceptance-tests/reports
 	hack/conformance/kind-enforcing.sh
-	cd acceptance-tests && KUBECONFIG=$(CURDIR)/acceptance-tests/.kube/conformance.kubeconfig \
+	hack/conformance/kind-nonenforcing.sh
+	KUBECONFIG=$(CURDIR)/acceptance-tests/.kube/conformance.kubeconfig:$(CURDIR)/acceptance-tests/.kube/nonenforcing.kubeconfig \
+		kubectl config view --flatten > acceptance-tests/.kube/merged.kubeconfig
+	cd acceptance-tests && KUBECONFIG=$(CURDIR)/acceptance-tests/.kube/merged.kubeconfig \
 		CLOUDBOX_KUBE_CONTEXT=kind-cloudbox-conformance \
+		CLOUDBOX_KUBE_NONENFORCING_CONTEXT=kind-cloudbox-nonenforcing \
 		.venv/bin/python run_acceptance.py --conformance

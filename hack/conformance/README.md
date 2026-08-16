@@ -41,3 +41,13 @@ Consequences:
   disables the default CNI and installs flannel, which accepts NetworkPolicy
   objects without enforcing them — exactly the condition the probe-failure
   scenarios need.
+
+## Verified finding: flannel v0.27.4 accepts but does not enforce NetworkPolicy
+
+Verified on 2026-08-16 on the `cloudbox-nonenforcing` cluster: a default-deny
+ingress+egress NetworkPolicy was admitted without error, and pod-to-pod
+traffic continued to flow — the silent failure mode N7's probe exists to
+catch, now arranged on real infrastructure. Provisioning notes: kindest/node
+ships without the reference CNI plugins flannel delegates to, so the script
+installs `containernetworking/plugins` v1.6.2 onto each node (via `/root`;
+the node's `/tmp` is a tmpfs that shadows `docker cp` writes).

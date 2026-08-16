@@ -17,8 +17,30 @@ import subprocess
 
 
 class KubeClusterPage:
-    def __init__(self):
-        self.name = os.environ.get("CLOUDBOX_KUBE_CONTEXT", "kind-cloudbox-conformance")
+    def __init__(self, name=None):
+        self.name = name or os.environ.get("CLOUDBOX_KUBE_CONTEXT", "kind-cloudbox-conformance")
+
+    @classmethod
+    def nonenforcing(cls):
+        """The deliberately non-enforcing cluster (flannel: accepts
+        NetworkPolicy objects, never enforces them)."""
+        return cls(os.environ.get("CLOUDBOX_KUBE_NONENFORCING_CONTEXT",
+                                  "kind-cloudbox-nonenforcing"))
+
+    def accepts_network_policy(self):
+        """The cluster admits a NetworkPolicy object (whether it enforces it
+        is exactly what the probe scenarios test)."""
+        manifest = (
+            "apiVersion: networking.k8s.io/v1\nkind: NetworkPolicy\n"
+            "metadata: {name: cloudbox-npcheck, namespace: default}\n"
+            "spec: {podSelector: {}, policyTypes: [Ingress, Egress]}\n"
+        )
+        result = subprocess.run(
+            ["kubectl", "--context", self.name, "apply", "-f", "-"],
+            input=manifest, capture_output=True, text=True, timeout=60,
+        )
+        self._kubectl("delete", "networkpolicy", "cloudbox-npcheck", "-n", "default")
+        return result.returncode == 0
 
     def _kubectl(self, *args, timeout=60):
         return subprocess.run(

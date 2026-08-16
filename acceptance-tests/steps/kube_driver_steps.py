@@ -213,6 +213,65 @@ def step_impl(context):
         context.kube.set_widget_operator_version("v1.0.0")
 
 
+# --- Rule: A non-enforcing CNI fails the probe and never yields a sealed sandbox ---
+
+
+@given("a real cluster whose CNI accepts NetworkPolicy objects without enforcing them")
+def step_impl(context):
+    assert context.kube_nonenforcing.reachable(), (
+        "the non-enforcing cluster %r is not reachable" % context.kube_nonenforcing.name
+    )
+    assert context.kube_nonenforcing.accepts_network_policy(), (
+        "the non-enforcing cluster rejected a NetworkPolicy object"
+    )
+
+
+@when("a sandbox is created on that cluster")
+def step_impl(context):
+    context.app_name = "app-%s" % uuid.uuid4().hex[:6]
+    # Pinned to the non-enforcing cluster; creation succeeds but the sandbox
+    # must come back unsealed.
+    context.applications.create(
+        context.app_name, sandboxCluster=context.kube_nonenforcing.name
+    )
+    context.sandbox_name = context.sandboxes.create(context.app_name, arrange=False)
+    record = context.sandboxes.record(context.sandbox_name)
+    record.raise_for_status()
+    context.sandbox_record = record.json()
+
+
+@then("the enforcement probe fails")
+def step_impl(context):
+    assert not context.sandbox_record["sealVerified"], (
+        "the probe passed on a non-enforcing cluster: %s" % context.sandbox_record
+    )
+
+
+@then("the sandbox is not reported sealed")
+def step_impl(context):
+    assert not context.sandbox_record["sealed"], context.sandbox_record
+    assert context.sandbox_record["state"] != "ready", context.sandbox_record
+
+
+@then("no evidence is emitted for that sandbox")
+def step_impl(context):
+    resp = context.sandboxes.evidence_response(context.sandbox_name)
+    assert resp.status_code == 409, (
+        "expected evidence to be refused, got %d: %s" % (resp.status_code, resp.text)
+    )
+    context.evidence_refusal = resp.json().get("error", "")
+    assert "no evidence" in context.evidence_refusal, context.evidence_refusal
+
+
+@then("the reported cause names unenforced network policy")
+def step_impl(context):
+    state = context.sandbox_record["state"]
+    assert "not-enforcing" in state, (
+        "sandbox state %r does not name unenforced network policy" % state
+    )
+    assert "enforcement probe" in context.evidence_refusal, context.evidence_refusal
+
+
 # --- Rule: Real workload readiness and squeeze failure are observed, not simulated ---
 
 
