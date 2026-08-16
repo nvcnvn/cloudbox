@@ -9,6 +9,7 @@ from pages.client import ApiClient, Cli
 from pages.applications import ApplicationsPage
 from pages.bundles import BundlesPage
 from pages.check import CheckPage
+from pages.conformance import ConformanceSubsetPage
 from pages.platform import PlatformPage
 from pages.runner import RunnerPage
 from pages.sandboxes import SandboxesPage
@@ -25,3 +26,4 @@ def attach(context):
     context.check = CheckPage(context.cli)
     context.scm = ScmPage(context.api)
     context.runner = RunnerPage()
+    context.conformance_subset = ConformanceSubsetPage()

@@ -58,3 +58,44 @@ def step_impl(context):
     assert not untagged, (
         "the conformance run selected untagged scenarios: %s" % sorted(untagged)
     )
+
+
+# --- Rule: Scenarios the real run cannot honestly prove are excluded and recorded ---
+
+
+@given("the defined conformance subset")
+def step_impl(context):
+    assert context.conformance_subset.subset(), "the conformance subset is empty"
+
+
+@when("its scenarios are listed")
+def step_impl(context):
+    context.listed_subset = context.conformance_subset.subset()
+
+
+@then("no soak-window scenario is present")
+def step_impl(context):
+    soaked = context.conformance_subset.soak_scenarios_in_subset()
+    assert not soaked, "soak-window scenarios in the subset: %s" % sorted(soaked)
+
+
+@then("the exclusion reason is recorded with the subset definition")
+def step_impl(context):
+    records = context.conformance_subset.recorded_exclusions()
+    soak_records = [
+        r for r in records
+        if "soak" in r["excluded"].lower() and r["reason"].strip()
+    ]
+    assert soak_records, (
+        "the subset definition records no soak exclusion reason (records: %s)"
+        % [r["excluded"] for r in records]
+    )
+
+
+@then("no scenario arranged only through a simulated external system is present")
+def step_impl(context):
+    flagged = context.conformance_subset.externally_arranged_in_subset()
+    assert not flagged, (
+        "subset scenarios arranged through simulated external systems: %s"
+        % sorted(flagged)
+    )

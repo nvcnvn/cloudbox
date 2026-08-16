@@ -25,6 +25,39 @@ HERE = Path(__file__).resolve().parent.parent  # acceptance-tests/
 CONFORMANCE_TAG = "conformance"
 _TAG_LINE = re.compile(r"^@\S")
 _SCENARIO_LINE = re.compile(r"^(Scenario(?: Outline)?):\s*(.+)$")
+_STEP_LINE = re.compile(r"^(Given|When|Then|And|But|\*)\s")
+
+
+def extracted_scenarios():
+    """Every scenario in the freshly extracted tree: name, tags (feature-level
+    tags included, no leading @), and its step lines."""
+    scenarios = []
+    for feature in sorted((HERE / ".extracted").rglob("*.feature")):
+        pending, feature_tags = [], []
+        current = None
+        for raw in feature.read_text().splitlines():
+            line = raw.strip()
+            if _TAG_LINE.match(line):
+                pending += [t.lstrip("@") for t in line.split()]
+            elif line.startswith("Feature:"):
+                feature_tags, pending = pending, []
+            else:
+                match = _SCENARIO_LINE.match(line)
+                if match:
+                    current = {
+                        "name": match.group(2).strip(),
+                        "tags": set(pending) | set(feature_tags),
+                        "steps": [],
+                    }
+                    scenarios.append(current)
+                    pending = []
+                elif _STEP_LINE.match(line):
+                    if current:
+                        current["steps"].append(line)
+                elif line and not line.startswith("#"):
+                    # Tags bind only across blank lines and comments.
+                    pending = []
+    return scenarios
 
 
 class RunSelection:
@@ -53,25 +86,9 @@ class RunnerPage:
     def conformance_tagged_scenarios(self):
         """Scenario names carrying @conformance, directly or via their
         Feature, in the freshly extracted tree."""
-        names = set()
-        for feature in sorted((HERE / ".extracted").rglob("*.feature")):
-            pending, feature_tags = [], []
-            for raw in feature.read_text().splitlines():
-                line = raw.strip()
-                if _TAG_LINE.match(line):
-                    pending += line.split()
-                elif line.startswith("Feature:"):
-                    feature_tags, pending = pending, []
-                else:
-                    match = _SCENARIO_LINE.match(line)
-                    if match:
-                        if ("@" + CONFORMANCE_TAG) in pending + feature_tags:
-                            names.add(match.group(2).strip())
-                        pending = []
-                    elif line and not line.startswith("#"):
-                        # Tags bind only across blank lines and comments.
-                        pending = []
-        return names
+        return {
+            s["name"] for s in extracted_scenarios() if CONFORMANCE_TAG in s["tags"]
+        }
 
     def _dry_run(self, mode_args):
         with tempfile.TemporaryDirectory() as tmp:
