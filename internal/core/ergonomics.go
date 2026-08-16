@@ -106,6 +106,7 @@ func (c *Core) Explain(sandboxName string) (*Explanation, error) {
 	if !ok {
 		return nil, errf(404, "sandbox %q is not known", sandboxName)
 	}
+	c.refreshBlockedEgressLocked(sb)
 	out := &Explanation{
 		Sandbox:       sandboxName,
 		BlockedEgress: append([]BlockedAttempt{}, sb.BlockedEgress...),

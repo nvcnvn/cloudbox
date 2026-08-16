@@ -178,11 +178,15 @@ func (c *Core) Apply(appName, sandboxName, actor, manifestYAML string, opts Appl
 	sb.SuspendedAutoscalers = suspended
 	sb.Diagnostics = nil
 
-	// Admit workloads into the sealed namespace.
+	// Admit the bundle into the sealed namespace. Non-workload objects
+	// (services, config, custom resources) reach the cluster as written;
+	// workload kinds carry readiness/OOM semantics and go through the
+	// driver's workload admission.
 	var migrationFailures []string
 	if hostKnown {
 		for _, obj := range admitted {
 			if !isWorkloadKind(obj.Kind) {
+				host.ApplyRaw(obj)
 				continue
 			}
 			w := cluster.Workload{Name: obj.Name, Ready: true, Manifest: obj.Manifest}

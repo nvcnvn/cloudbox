@@ -66,6 +66,28 @@ class KubeClusterPage:
     def namespace_exists(self, namespace):
         return self._kubectl("get", "namespace", namespace).returncode == 0
 
+    def workload_logs(self, namespace, workload):
+        """The pods' logs for one admitted workload (app=<name> label).
+        Returns what is readable so far — empty while the pod is still
+        scheduling or its container has not started (callers poll)."""
+        result = self._kubectl(
+            "logs", "-n", namespace, "-l", "app=%s" % workload, "--tail=-1"
+        )
+        if result.returncode != 0:
+            return ""
+        return result.stdout
+
+    def proxy_attempts(self, namespace):
+        """The egress proxy's recorded attempts, read through the API server's
+        service proxy — the same path the control plane collects them by."""
+        result = self._kubectl(
+            "get", "--raw",
+            "/api/v1/namespaces/%s/services/http:cloudbox-egress-proxy:admin/proxy/attempts"
+            % namespace,
+        )
+        result.check_returncode()
+        return json.loads(result.stdout)
+
     def server_minor(self):
         result = self._kubectl("version", "-o", "json")
         result.check_returncode()

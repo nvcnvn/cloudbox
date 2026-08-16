@@ -104,6 +104,18 @@ def after_all(context):
         app.wait(timeout=10)
 
 
+def after_scenario(context, scenario):
+    # Real-cluster runs have no /simctl/reset; tear down the scenario's
+    # sandbox (and with it its namespace) so the cluster stays bounded.
+    if getattr(context, "driver", "sim") != "sim":
+        sandbox = getattr(context, "sandbox_name", None)
+        if sandbox:
+            try:
+                context.sandboxes.destroy(sandbox)
+            except Exception:
+                pass
+
+
 def before_scenario(context, scenario):
     # /simctl/* exists only when the sim driver is constructed (ADR 0008);
     # under kube there is no arrangement surface to reset.

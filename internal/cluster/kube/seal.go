@@ -23,7 +23,9 @@ const (
 	// admits egress to them and nothing else beyond cluster DNS.
 	proxyLabelKey   = "cloudbox.dev/component"
 	proxyLabelValue = "egress-proxy"
+	proxyName       = "cloudbox-egress-proxy"
 	proxyPort       = 3128
+	proxyAdminPort  = 3129
 
 	// allowlistConfigMap carries the sealed namespace's FQDN allowlist to the
 	// egress proxy (the proxy enforces it; NetworkPolicy v1 cannot).
@@ -39,12 +41,22 @@ const (
 // egress proxy (which alone may leave the cluster, enforcing the FQDN
 // allowlist). Idempotent: re-sealing updates the policies and allowlist.
 func (c *Cluster) SealNamespace(name string, allowlist []string) {
+	c.installSealPolicies(name, allowlist)
+	// The proxy the policies admit: product-managed, per namespace.
+	c.deployEgressProxy(name)
+}
+
+// installSealPolicies is the policy-and-allowlist half of the seal; the
+// enforcement probe seals its scratch namespaces with this alone, since a
+// canary needs the denial semantics, not a proxy deployment.
+func (c *Cluster) installSealPolicies(name string, allowlist []string) {
 	proxySelector := metav1.LabelSelector{
 		MatchLabels: map[string]string{proxyLabelKey: proxyLabelValue},
 	}
 	dnsPort := intstr.FromInt32(53)
 	udp, tcp := corev1.ProtocolUDP, corev1.ProtocolTCP
 	proxyTCP := intstr.FromInt32(proxyPort)
+	adminTCP := intstr.FromInt32(proxyAdminPort)
 
 	policies := []*networkingv1.NetworkPolicy{
 		{
@@ -114,6 +126,19 @@ func (c *Cluster) SealNamespace(name string, allowlist []string) {
 				Egress:      []networkingv1.NetworkPolicyEgressRule{{}},
 			},
 		},
+		{
+			// The control plane collects the proxy's attempt records through
+			// the API server's service proxy, whose traffic is not in-sandbox
+			// pod traffic; admit the admin port alone.
+			ObjectMeta: metav1.ObjectMeta{Name: "cloudbox-egress-proxy-admin", Namespace: name},
+			Spec: networkingv1.NetworkPolicySpec{
+				PodSelector: proxySelector,
+				PolicyTypes: []networkingv1.PolicyType{networkingv1.PolicyTypeIngress},
+				Ingress: []networkingv1.NetworkPolicyIngressRule{{
+					Ports: []networkingv1.NetworkPolicyPort{{Protocol: &tcp, Port: &adminTCP}},
+				}},
+			},
+		},
 	}
 	for _, policy := range policies {
 		c.applyNetworkPolicy(policy)
@@ -176,7 +201,7 @@ func (c *Cluster) ProbeEnforcement() bool {
 	defer c.DeleteNamespace(baselineNS)
 	defer c.DeleteNamespace(sealedNS)
 
-	c.SealNamespace(sealedNS, nil)
+	c.installSealPolicies(sealedNS, nil)
 	if !c.startCanary(baselineNS, target) || !c.startCanary(sealedNS, target) {
 		return false
 	}

@@ -6,7 +6,14 @@ import uuid
 
 from behave import given, when, then
 
-from pages.bundles import MEMORY_HOG_YAML, READY_WORKLOAD_YAML, WIDGET_BUNDLE_YAML
+from pages.bundles import (
+    ALLOWED_EGRESS_YAML,
+    EGRESS_ATTEMPT_YAML,
+    MEMORY_HOG_YAML,
+    READY_WORKLOAD_YAML,
+    TWO_SERVICES_YAML,
+    WIDGET_BUNDLE_YAML,
+)
 
 PRODUCT_CRDS = {
     "applications.cloudbox.dev",
@@ -264,6 +271,113 @@ def step_impl(context):
     assert matching, "no capacity-squeeze-incompatible diagnostic for %r: %s" % (
         context.workload_name, diagnostics,
     )
+
+
+# --- Rule: A real workload's blocked egress is denied and recorded ---
+
+
+def wait_for_log_markers(context, workload, markers, timeout=240):
+    """Poll the workload's own output until every marker appears — the real
+    pod reports what actually happened to its connections."""
+    deadline = time.time() + timeout
+    logs = ""
+    while time.time() < deadline:
+        logs = context.kube.workload_logs(context.sandbox_name, workload)
+        if all(marker in logs for marker in markers):
+            return logs
+        time.sleep(2)
+    raise AssertionError(
+        "workload %r never printed %s; last logs:\n%s" % (workload, markers, logs)
+    )
+
+
+@given("a sealed sandbox on a real cluster running a workload")
+def step_impl(context):
+    create_sealed_sandbox(context)
+    context.bundles.apply(context.app_name, context.sandbox_name, EGRESS_ATTEMPT_YAML)
+    context.bundles.last_response.raise_for_status()
+    context.workload_name = "prober"
+
+
+@when('the workload attempts to connect to "{destination}"')
+def step_impl(context, destination):
+    context.attempt_destination = destination
+    context.prober_logs = wait_for_log_markers(context, "prober", ["DIRECT:", "PROXY:"])
+
+
+@then("the connection is denied by the cluster")
+def step_impl(context):
+    assert "DIRECT:BLOCKED" in context.prober_logs, (
+        "direct egress was not denied by the cluster:\n%s" % context.prober_logs
+    )
+    assert "PROXY:DENIED" in context.prober_logs, (
+        "the egress proxy did not refuse the undeclared destination:\n%s"
+        % context.prober_logs
+    )
+
+
+@then("the blocked attempt is recorded with its destination and attribution")
+def step_impl(context):
+    explanation = context.sandboxes.explain(context.sandbox_name)
+    matching = [
+        b for b in explanation["blockedEgress"]
+        if b["destination"] == context.attempt_destination
+        and b["workload"] == context.workload_name
+    ]
+    assert matching, (
+        "no blocked attempt recorded for %r attributed to %r: %s"
+        % (context.attempt_destination, context.workload_name, explanation["blockedEgress"])
+    )
+
+
+@given("a sealed sandbox on a real cluster whose allowlist declares one external endpoint")
+def step_impl(context):
+    context.declared_endpoint = "example.com"
+    create_sealed_sandbox(context, app_fields={
+        "contract": {
+            "secretNames": [],
+            "ingressHostnames": [],
+            "egressAllowlist": [context.declared_endpoint],
+            "dependencies": [],
+        },
+    })
+
+
+@when("a workload connects to that declared endpoint")
+def step_impl(context):
+    context.bundles.apply(context.app_name, context.sandbox_name, ALLOWED_EGRESS_YAML)
+    context.bundles.last_response.raise_for_status()
+    context.fetcher_logs = wait_for_log_markers(context, "fetcher", ["FETCH:"])
+
+
+@then("the connection succeeds through the egress proxy")
+def step_impl(context):
+    assert "FETCH:OK" in context.fetcher_logs, (
+        "the declared endpoint was not reachable:\n%s" % context.fetcher_logs
+    )
+    attempts = context.kube.proxy_attempts(context.sandbox_name)
+    proxied = [
+        a for a in attempts
+        if a["destination"] == context.declared_endpoint and a["allowed"]
+    ]
+    assert proxied, (
+        "the egress proxy recorded no allowed attempt for %r: %s"
+        % (context.declared_endpoint, attempts)
+    )
+
+
+@given("a sealed sandbox on a real cluster running two services")
+def step_impl(context):
+    create_sealed_sandbox(context)
+    context.bundles.apply(context.app_name, context.sandbox_name, TWO_SERVICES_YAML)
+    context.bundles.last_response.raise_for_status()
+
+
+@when("one service resolves and calls the other by its short name")
+def step_impl(context):
+    logs = wait_for_log_markers(context, "caller", ["DNS:", "CONN:"])
+    context.dns_ok = "DNS:OK" in logs
+    context.conn_ok = "CONN:OK" in logs
 
 
 # --- Rule: The simulation arrangement surface is absent under the kube driver ---

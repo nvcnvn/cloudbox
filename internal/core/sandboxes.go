@@ -257,6 +257,7 @@ func (c *Core) GetSandbox(name string) (*Sandbox, error) {
 		return nil, errf(404, "sandbox %q is not known", name)
 	}
 	c.refreshObservedDiagnosticsLocked(sb)
+	c.refreshBlockedEgressLocked(sb)
 	return sb, nil
 }
 
@@ -274,6 +275,46 @@ func (c *Core) SandboxWorkloads(name string) ([]cluster.Workload, error) {
 	}
 	c.refreshObservedDiagnosticsLocked(sb)
 	return host.Workloads(sb.Namespace), nil
+}
+
+// refreshBlockedEgressLocked folds the egress proxy's observed denials into
+// the sandbox's blocked-egress record (N4). The sim driver records attempts
+// synchronously through core.AttemptEgress; on a real cluster the product
+// egress proxy observes them, and drivers expose that as the optional
+// cluster.EgressObserver capability (ADR 0008 keeps the cluster contract
+// frozen). Deduplicated by destination, workload and timestamp. Callers hold
+// c.mu.
+func (c *Core) refreshBlockedEgressLocked(sb *Sandbox) {
+	if sb.State == "destroyed" {
+		return
+	}
+	host, ok := c.driver.Cluster(sb.Cluster)
+	if !ok {
+		return
+	}
+	observer, ok := host.(cluster.EgressObserver)
+	if !ok {
+		return
+	}
+	for _, attempt := range observer.EgressAttempts(sb.Namespace) {
+		if attempt.Allowed {
+			continue
+		}
+		recorded := false
+		for _, b := range sb.BlockedEgress {
+			if b.Destination == attempt.Destination && b.Workload == attempt.Workload &&
+				b.At.Equal(attempt.At) {
+				recorded = true
+			}
+		}
+		if !recorded {
+			sb.BlockedEgress = append(sb.BlockedEgress, BlockedAttempt{
+				Destination: attempt.Destination,
+				At:          attempt.At,
+				Workload:    attempt.Workload,
+			})
+		}
+	}
 }
 
 // refreshObservedDiagnosticsLocked folds cluster-observed workload failures

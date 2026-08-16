@@ -43,3 +43,8 @@ class SandboxesPage:
         resp = self._api.get("/v1/sandboxes/%s/evidence" % sandbox)
         resp.raise_for_status()
         return resp.json()
+
+    def explain(self, sandbox):
+        resp = self._api.get("/v1/sandboxes/%s/explain" % sandbox)
+        resp.raise_for_status()
+        return resp.json()

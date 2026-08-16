@@ -49,6 +49,10 @@ for node in $(kind get nodes --name "$CLUSTER"); do
   docker exec "$node" crictl pull "docker.io/library/$CANARY_IMAGE"
 done
 
+# Build and load the product egress proxy image (cmd/cloudbox-proxy) that
+# SealNamespace deploys into every sealed namespace.
+"$HERE/build-proxy-image.sh" "$CLUSTER"
+
 if ! kubectl get daemonset calico-node -n kube-system >/dev/null 2>&1; then
   kubectl apply -f "$CALICO_MANIFEST"
 fi

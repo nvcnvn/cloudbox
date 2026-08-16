@@ -76,6 +76,137 @@ spec:
             limits: {cpu: 100m, memory: 128Mi}
 """
 
+# Attempts egress to an undeclared destination, both directly (the CNI must
+# deny it) and through the injected egress proxy (which must refuse and
+# record it). The direct leg targets an IP literal: an undeclared FQDN has
+# nothing to resolve to, and IP-literal egress is exactly what the seal's
+# containment statement promises to block.
+EGRESS_ATTEMPT_YAML = """\
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prober
+  labels: {app: prober}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: prober}
+  template:
+    metadata:
+      labels: {app: prober}
+    spec:
+      containers:
+        - name: prober
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - >
+              i=0; while [ $i -lt 30 ]; do
+              if nc -w 2 cloudbox-egress-proxy 3128 </dev/null; then break; fi;
+              i=$((i+1)); sleep 2; done;
+              if nc -w 3 1.1.1.1 443 </dev/null;
+              then echo DIRECT:CONNECTED; else echo DIRECT:BLOCKED; fi;
+              if wget -q -O /dev/null -T 10 http://api.other-vendor.com/;
+              then echo PROXY:ALLOWED; else echo PROXY:DENIED; fi;
+              sleep 1000000000
+"""
+
+# Fetches one declared external endpoint through the injected egress proxy.
+ALLOWED_EGRESS_YAML = """\
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fetcher
+  labels: {app: fetcher}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: fetcher}
+  template:
+    metadata:
+      labels: {app: fetcher}
+    spec:
+      containers:
+        - name: fetcher
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - >
+              i=0; while [ $i -lt 30 ]; do
+              if nc -w 2 cloudbox-egress-proxy 3128 </dev/null; then break; fi;
+              i=$((i+1)); sleep 2; done;
+              if wget -q -O /dev/null -T 20 http://example.com/;
+              then echo FETCH:OK; else echo FETCH:FAILED; fi;
+              sleep 1000000000
+"""
+
+# Two services in one sandbox: an httpd plus a caller that resolves it by
+# short name through cluster DNS and connects directly (nc uses no proxy).
+TWO_SERVICES_YAML = """\
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  labels: {app: web}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: web}
+  template:
+    metadata:
+      labels: {app: web}
+    spec:
+      containers:
+        - name: web
+          image: busybox:1.36
+          command: ["sh", "-c", "mkdir -p /www && echo ok > /www/index.html && httpd -f -p 8080 -h /www"]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+spec:
+  selector: {app: web}
+  ports:
+    - port: 8080
+      targetPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: caller
+  labels: {app: caller}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: caller}
+  template:
+    metadata:
+      labels: {app: caller}
+    spec:
+      containers:
+        - name: caller
+          image: busybox:1.36
+          env:
+            - name: NAMESPACE
+              valueFrom:
+                fieldRef: {fieldPath: metadata.namespace}
+          command:
+            - sh
+            - -c
+            - >
+              i=0; dns=DNS:FAIL; conn=CONN:FAIL;
+              while [ $i -lt 45 ]; do
+                if nslookup "web.$NAMESPACE.svc.cluster.local" >/dev/null 2>&1; then dns=DNS:OK; fi;
+                if nc -w 2 web 8080 </dev/null; then conn=CONN:OK; fi;
+                if [ "$dns" = DNS:OK ] && [ "$conn" = CONN:OK ]; then break; fi;
+                i=$((i+1)); sleep 2;
+              done;
+              echo $dns; echo $conn; sleep 1000000000
+"""
+
 # Declares a 128Mi limit the squeezed transform halves to the 64Mi floor,
 # then allocates ~100Mi: the kernel OOM-kills it under the squeeze.
 MEMORY_HOG_YAML = """\
@@ -205,8 +336,10 @@ class BundlesPage:
         if record_egress:
             payload["recordEgress"] = True
         self.last_manifests = manifests
+        # Under the kube driver an apply reaches a real API server per object.
         self.last_response = self._api.post(
-            "/v1/apply", json=payload, headers={"X-Cloudbox-User": actor}
+            "/v1/apply", json=payload, headers={"X-Cloudbox-User": actor},
+            timeout=120,
         )
         return self.last_response
 
@@ -222,10 +355,12 @@ class BundlesPage:
 
     def apply(self, app, sandbox, manifests, actor="dev@example.com"):
         self.last_manifests = manifests
+        # Under the kube driver an apply reaches a real API server per object.
         self.last_response = self._api.post(
             "/v1/apply",
             json={"app": app, "sandbox": sandbox, "manifests": manifests},
             headers={"X-Cloudbox-User": actor},
+            timeout=120,
         )
         return self.last_response
 

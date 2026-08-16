@@ -93,6 +93,12 @@ def step_impl(context):
 
 @given('"api.other-vendor.com" is not on the application allowlist')
 def step_impl(context):
+    if getattr(context, "driver", "sim") == "kube":
+        # The real-cluster scenario already arranged its sealed sandbox; this
+        # step only verifies the arrangement it asserts.
+        contract = context.applications.declared_contract(context.app_name)
+        assert "api.other-vendor.com" not in (contract.get("egressAllowlist") or [])
+        return
     _sealed_sandbox(context, allowlist=["api.stripe.com"])
 
 
@@ -119,6 +125,12 @@ def step_impl(context):
 
 @then("name resolution and the in-sandbox connection succeed")
 def step_impl(context):
+    if getattr(context, "driver", "sim") == "kube":
+        # Observed from the real caller workload's own output (its When step
+        # gathered the verdicts).
+        assert context.dns_ok, "cluster DNS resolution failed under the real seal"
+        assert context.conn_ok, "in-sandbox connection failed under the real seal"
+        return
     assert context.dns_result["allowed"] and context.dns_result["via"] == "cluster-dns"
     assert context.egress_result["allowed"] and context.egress_result["via"] == "in-sandbox"
 
