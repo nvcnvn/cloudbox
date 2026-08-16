@@ -41,6 +41,14 @@ func NewWithDriver(driver cluster.Driver) *Server {
 	s.mux = http.NewServeMux()
 	s.mux.HandleFunc("GET /healthz", s.healthz)
 	s.v1Routes()
+	// Real-clock lifecycle (ADR 0008): TTL and idle expiry advance with the
+	// wall clock. The sim path ticks on simulated-clock advances; this path
+	// has no simulated clock, so it ticks on the real one.
+	go func() {
+		for range time.Tick(time.Second) {
+			s.core.Tick()
+		}
+	}()
 	return s
 }
 

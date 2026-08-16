@@ -1,8 +1,12 @@
-"""Steps for the conformance-ci capability's untagged (sim-run) scenarios."""
+"""Steps for the conformance-ci capability: the untagged (sim-run) scenarios
+plus the @conformance real-clock lifecycle scenarios."""
+
+import time
 
 from behave import given, when, then
 
 from pages.gate import check_enforcement
+from kube_driver_steps import create_sealed_sandbox
 
 
 # --- Rule: The default acceptance run excludes conformance-tagged scenarios ---
@@ -112,6 +116,61 @@ def step_impl(context):
 @then("the run reports no conformance pass")
 def step_impl(context):
     assert "no conformance pass" in context.gate_message, context.gate_message
+
+
+# --- Rule: Conformance lifecycle expiry uses the real clock ---
+#
+# No simulated clock exists on this path: /simctl/advance-time is never
+# served under the kube driver (proven by its own scenario), so the only way
+# these pass is the wall clock actually elapsing.
+
+
+def wait_until_destroyed(context, timeout=120):
+    deadline = time.time() + timeout
+    record = None
+    while time.time() < deadline:
+        record = context.sandboxes.record(context.sandbox_name).json()
+        if record["state"] == "destroyed":
+            return record
+        time.sleep(2)
+    raise AssertionError(
+        "sandbox %r was not destroyed in real time; last state %r"
+        % (context.sandbox_name, record and record["state"])
+    )
+
+
+@given("a sandbox on a real cluster with a time-to-live of a few seconds")
+def step_impl(context):
+    create_sealed_sandbox(context, ttl_seconds=20)
+
+
+@when("that time-to-live elapses in real time")
+def step_impl(context):
+    # The shared "the sandbox is destroyed" Then re-reads the record; this
+    # wait is what makes it real time rather than a simulated advance.
+    context.final_record = wait_until_destroyed(context)
+
+
+@then("its namespace is removed from the cluster")
+def step_impl(context):
+    deadline = time.time() + 120
+    while time.time() < deadline:
+        if not context.kube.namespace_exists(context.sandbox_name):
+            return
+        time.sleep(2)
+    raise AssertionError(
+        "namespace %r still exists on the cluster" % context.sandbox_name
+    )
+
+
+@given("a sandbox on a real cluster with an idle-expiry window of a few seconds")
+def step_impl(context):
+    create_sealed_sandbox(context, app_fields={"policies": {"idleExpirySeconds": 10}})
+
+
+@when("the sandbox sees no activity for longer than that window")
+def step_impl(context):
+    context.final_record = wait_until_destroyed(context)
 
 
 # --- Rule: Scenarios the real run cannot honestly prove are excluded and recorded ---

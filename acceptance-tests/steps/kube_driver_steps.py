@@ -33,14 +33,16 @@ def arrange_real_platform(context):
     context.platform.register_cluster(context.kube.name, "production")
 
 
-def create_sealed_sandbox(context, app_fields=None):
+def create_sealed_sandbox(context, app_fields=None, ttl_seconds=0):
     """A sealed sandbox on the real cluster for a fresh application; asserts
     the seal was probe-verified. App names are unique per scenario because a
     real run shares one control plane across the suite."""
     arrange_real_platform(context)
     context.app_name = "app-%s" % uuid.uuid4().hex[:6]
     context.applications.create(context.app_name, **(app_fields or {}))
-    context.sandbox_name = context.sandboxes.create(context.app_name, arrange=False)
+    context.sandbox_name = context.sandboxes.create(
+        context.app_name, arrange=False, ttl_seconds=ttl_seconds
+    )
     record = context.sandboxes.record(context.sandbox_name)
     record.raise_for_status()
     body = record.json()
