@@ -50,7 +50,7 @@ effective suite, so the default run is red until 1.1 lands. Do this first.
 ## 5. Real-clock timing and the full integration check
 
 - [x] 5.1 conformance-ci: conformance lifecycle expiry uses the real clock — short real TTL destroys the sandbox and removes its namespace, short real idle window destroys an inactive sandbox, with no simulated clock advance in the conformance path — red → green → commit
-- [ ] 5.2 conformance-ci: continuous integration runs the full effective suite on every change — extend the 2.1 workflow with the conformance subset against Kind with an enforcing CNI, and confirm a failing subset fails the check — red → green → commit
+- [x] 5.2 conformance-ci: continuous integration runs the full effective suite on every change — extend the 2.1 workflow with the conformance subset against Kind with an enforcing CNI, and confirm a failing subset fails the check — red → green → commit
 
 ## 6. Sim reconciliation
 

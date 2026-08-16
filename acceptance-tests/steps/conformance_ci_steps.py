@@ -212,3 +212,47 @@ def step_impl(context):
         "subset scenarios arranged through simulated external systems: %s"
         % sorted(flagged)
     )
+
+
+# --- Rule: Continuous integration runs the full effective suite on every change ---
+
+
+@given("the continuous-integration configuration")
+def step_impl(context):
+    assert context.ci_config.exists(), "no continuous-integration workflow exists"
+
+
+@when("its required stages are read")
+def step_impl(context):
+    context.missing_stages = context.ci_config.missing_stages()
+
+
+@then("it builds both binaries, vets the sources, lints the extracted specifications, runs the simulation suite, and runs the conformance subset")
+def step_impl(context):
+    assert not context.missing_stages, (
+        "continuous integration is missing required stages: %s"
+        % context.missing_stages
+    )
+
+
+@given("a continuous-integration run whose conformance subset fails")
+def step_impl(context):
+    context.failing_run = context.ci_config.run_conformance_against_broken_cluster()
+
+
+@when("the check result is reported")
+def step_impl(context):
+    # A CI step's verdict is its exit code, and the workflow must not swallow
+    # one (no continue-on-error, no shell-level masking).
+    context.check_fails = (
+        context.failing_run.returncode != 0
+        and context.ci_config.propagates_failures()
+    )
+
+
+@then("the check fails")
+def step_impl(context):
+    assert context.check_fails, (
+        "a failing conformance subset did not fail the check (exit=%d):\n%s"
+        % (context.failing_run.returncode, context.failing_run.stderr[-2000:])
+    )

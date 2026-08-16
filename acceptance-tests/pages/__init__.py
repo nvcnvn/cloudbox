@@ -9,6 +9,7 @@ from pages.client import ApiClient, Cli
 from pages.applications import ApplicationsPage
 from pages.bundles import BundlesPage
 from pages.check import CheckPage
+from pages.ci import CIConfigPage
 from pages.conformance import ConformanceSubsetPage
 from pages.kube import KubeClusterPage
 from pages.platform import PlatformPage
@@ -30,3 +31,4 @@ def attach(context):
     context.conformance_subset = ConformanceSubsetPage()
     context.kube = KubeClusterPage()
     context.kube_nonenforcing = KubeClusterPage.nonenforcing()
+    context.ci_config = CIConfigPage()
