@@ -8,6 +8,17 @@
 // discarded, because a truncated record served as a complete one under-counts
 // the violations in a run's evidence.
 //
+// WHAT PROTECTS THE ADMIN SURFACE. /attempts requires the per-namespace
+// credential the control plane creates at seal time, and NOT the seal's
+// NetworkPolicy. The seal's cloudbox-egress-proxy-admin rule admits ingress on
+// the admin port from any source, deliberately: collection arrives through the
+// API server's service proxy, whose source address is a cluster-topology
+// detail, and pinning it into the seal would make the seal cluster-specific and
+// quietly breakable by a topology change. So any pod on the cluster can still
+// open a connection to this port — it just cannot read anything without the
+// credential. Anyone hardening this later should know the policy was never the
+// control (ADR 0001: residual channels are published, not papered over).
+//
 // One proxy runs per sealed namespace. The allowlist arrives via the
 // cloudbox-egress-allowlist ConfigMap, mounted as a file and re-read per
 // request so a re-seal (allowlist change) needs no restart. Attempts are
@@ -18,6 +29,7 @@ package main
 import (
 	"bufio"
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
 	"flag"
@@ -71,6 +83,32 @@ type proxy struct {
 	incarnation string
 
 	allowlistPath string
+	// adminTokenPath is the per-namespace credential the control plane
+	// presents to read /attempts. Read per request, like the allowlist, so a
+	// re-seal needs no restart.
+	adminTokenPath string
+}
+
+// adminTokenHeader carries the credential on /attempts. A header rather than a
+// query parameter: the collection goes through the API server's service proxy,
+// which forwards headers to the backend but records request URIs in its audit
+// log, and a credential does not belong in an audit log.
+const adminTokenHeader = "X-Cloudbox-Egress-Token"
+
+// authorized reports whether a request may read the attempt record. Fails
+// closed, like the allowlist: an unreadable credential authorizes nobody.
+func (p *proxy) authorized(r *http.Request) bool {
+	want, err := os.ReadFile(p.adminTokenPath)
+	if err != nil {
+		log.Printf("cloudbox-proxy: reading the admin token: %v", err)
+		return false
+	}
+	expected := strings.TrimSpace(string(want))
+	if expected == "" {
+		return false
+	}
+	got := strings.TrimSpace(r.Header.Get(adminTokenHeader))
+	return subtle.ConstantTimeCompare([]byte(got), []byte(expected)) == 1
 }
 
 // newIncarnation is generated once per process start.
@@ -183,7 +221,12 @@ func pipe(dst io.WriteCloser, src io.ReadCloser) {
 	_, _ = io.Copy(dst, bufio.NewReader(src))
 }
 
-func (p *proxy) serveAttempts(w http.ResponseWriter, _ *http.Request) {
+func (p *proxy) serveAttempts(w http.ResponseWriter, r *http.Request) {
+	if !p.authorized(r) {
+		http.Error(w, "the attempt record is readable only by the control plane",
+			http.StatusUnauthorized)
+		return
+	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	retained := p.attempts
@@ -202,12 +245,15 @@ func main() {
 	allowlist := flag.String("allowlist", "/etc/cloudbox/allowlist", "allowlist file path")
 	maxRetained := flag.Int("max-attempts", defaultMaxRetainedAttempts,
 		"how many attempts to retain; beyond this the oldest are discarded and counted")
+	adminToken := flag.String("admin-token", "/etc/cloudbox/admin/token",
+		"file holding the credential required to read /attempts")
 	flag.Parse()
 
 	p := &proxy{
-		allowlistPath: *allowlist,
-		maxRetained:   *maxRetained,
-		incarnation:   newIncarnation(),
+		allowlistPath:  *allowlist,
+		maxRetained:    *maxRetained,
+		incarnation:    newIncarnation(),
+		adminTokenPath: *adminToken,
 	}
 
 	admin := http.NewServeMux()

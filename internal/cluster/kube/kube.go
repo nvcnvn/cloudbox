@@ -107,11 +107,12 @@ func (d *Driver) Cluster(name string) (cluster.Cluster, bool) {
 		return nil, false
 	}
 	c := &Cluster{
-		name:       name,
-		clientset:  clientset,
-		extensions: extensions,
-		dynamic:    dyn,
-		discovery:  clientset.Discovery(),
+		name:        name,
+		clientset:   clientset,
+		extensions:  extensions,
+		dynamic:     dyn,
+		discovery:   clientset.Discovery(),
+		adminTokens: map[string]string{},
 	}
 	d.clusters[name] = c
 	return c, true
@@ -124,6 +125,11 @@ type Cluster struct {
 	extensions apiextensionsclient.Interface
 	dynamic    dynamic.Interface
 	discovery  discovery.DiscoveryInterface
+
+	// adminTokens caches each sealed namespace's egress-proxy credential; it
+	// is fixed for the namespace's life (see proxy.go).
+	tokenMu     sync.Mutex
+	adminTokens map[string]string
 }
 
 func (c *Cluster) Name() string { return c.name }

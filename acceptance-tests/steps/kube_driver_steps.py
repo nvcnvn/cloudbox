@@ -6,6 +6,7 @@ import uuid
 
 from behave import given, when, then
 
+from outcomes import Refusal
 from pages.bundles import (
     ALLOWED_EGRESS_YAML,
     EGRESS_ATTEMPT_YAML,
@@ -599,6 +600,45 @@ def step_impl(context):
     summary = context.evidence["summary"]
     assert "INCOMPLETE egress record" in summary, (
         "the evidence summary reads as a complete count: %r" % summary
+    )
+
+
+# --- Rule: The proxy's attempt surface is reachable only by the control plane ---
+
+
+@given("a sealed sandbox on a real cluster with recorded egress attempts")
+def step_impl(context):
+    create_sealed_sandbox(context)
+    context.workload_name = "prober"
+    context.attempt_destination = "api.other-vendor.com"
+    context.bundles.apply(context.app_name, context.sandbox_name, EGRESS_ATTEMPT_YAML)
+    context.bundles.last_response.raise_for_status()
+    wait_for_log_markers(context, context.workload_name, ["PROXY:DENIED"])
+
+
+@when("a workload in an unsealed namespace requests that sandbox's attempt surface")
+def step_impl(context):
+    context.outsider_output = context.kube.read_attempt_surface_from_unsealed_namespace(
+        context.sandbox_name
+    )
+    leaked = context.attempt_destination in context.outsider_output
+    context.refusal = Refusal(
+        "READ:REFUSED" in context.outsider_output
+        and "READ:ALLOWED" not in context.outsider_output
+        and not leaked,
+        "a workload outside the sandbox read its attempt surface:\n%s" % context.outsider_output,
+    )
+
+
+@then("the control plane's own collection still returns the records")
+def step_impl(context):
+    record = context.sandboxes.record(context.sandbox_name)
+    record.raise_for_status()
+    blocked = record.json()["blockedEgress"]
+    matching = [b for b in blocked if b["destination"] == context.attempt_destination]
+    assert matching, (
+        "the control plane's collection returned no record of %r: %s"
+        % (context.attempt_destination, blocked)
     )
 
 

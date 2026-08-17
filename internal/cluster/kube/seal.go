@@ -31,6 +31,15 @@ const (
 	// egress proxy (the proxy enforces it; NetworkPolicy v1 cannot).
 	allowlistConfigMap = "cloudbox-egress-allowlist"
 
+	// adminTokenSecret carries the per-namespace credential for the proxy's
+	// attempt surface. The surface is read-only, but it is the trust root for
+	// the violation count in evidence, so it is not an open read either.
+	adminTokenSecret = "cloudbox-egress-proxy-token"
+	adminTokenKey    = "token"
+	// adminTokenHeader is how the control plane presents that credential. It
+	// must match cmd/cloudbox-proxy.
+	adminTokenHeader = "X-Cloudbox-Egress-Token"
+
 	// canaryImage runs probe canaries; pinned and preloaded into the Kind
 	// clusters by hack/conformance/*.sh.
 	canaryImage = "busybox:1.36"
@@ -130,6 +139,15 @@ func (c *Cluster) installSealPolicies(name string, allowlist []string) {
 			// The control plane collects the proxy's attempt records through
 			// the API server's service proxy, whose traffic is not in-sandbox
 			// pod traffic; admit the admin port alone.
+			//
+			// This rule stays permissive on that port by necessity: the source
+			// address of API-server service-proxy traffic is a cluster-topology
+			// detail, and encoding it here would make the seal cluster-specific
+			// and quietly breakable by a topology change. So the NetworkPolicy
+			// is NOT what protects this surface — the per-namespace credential
+			// on /attempts is (adminTokenSecret). Stated plainly so nobody
+			// later reads this rule as the protection (ADR 0001: residual
+			// channels are published, not papered over).
 			ObjectMeta: metav1.ObjectMeta{Name: "cloudbox-egress-proxy-admin", Namespace: name},
 			Spec: networkingv1.NetworkPolicySpec{
 				PodSelector: proxySelector,

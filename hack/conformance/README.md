@@ -51,3 +51,24 @@ catch, now arranged on real infrastructure. Provisioning notes: kindest/node
 ships without the reference CNI plugins flannel delegates to, so the script
 installs `containernetworking/plugins` v1.6.2 onto each node (via `/root`;
 the node's `/tmp` is a tmpfs that shadows `docker cp` writes).
+
+## Published residual exposure: the proxy's admin port stays open, the token is the control
+
+The seal's `cloudbox-egress-proxy-admin` NetworkPolicy admits ingress on the
+egress proxy's admin port (3129) **from any source**, and that is deliberate.
+The control plane collects attempt records through the API server's service
+proxy, whose source address is a cluster-topology detail; encoding it into the
+seal would make the seal cluster-specific and quietly breakable by a topology
+change.
+
+What actually protects the surface is the per-namespace credential
+(`cloudbox-egress-proxy-token`, created at seal time, presented as
+`X-Cloudbox-Egress-Token`): `/attempts` refuses any request without it. So a
+pod elsewhere on the cluster can still open a connection to that port and gets
+401 — verified by the conformance scenario "A pod outside the sandbox cannot
+read its attempt records", which reaches the port from an unsealed namespace and
+asserts the refusal.
+
+Stated here because the failure mode is a later reader assuming the
+NetworkPolicy is the protection and removing the credential check as
+redundant (ADR 0001: residual channels are published, not papered over).

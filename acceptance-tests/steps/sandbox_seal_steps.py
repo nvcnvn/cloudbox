@@ -2,6 +2,8 @@
 
 from behave import given, when, then
 
+from outcomes import Refusal
+
 # Short names resolve through Services (cluster DNS resolves Services, not
 # workloads — sim DIVERGENCES.md entry 1), so a realistic bundle declares them.
 TWO_SERVICES = (
@@ -248,11 +250,16 @@ def step_impl(context):
         json={"fqdn": "api.new-vendor.com"},
         headers={"X-Cloudbox-User": "dev@example.com"},
     )
+    context.refusal = Refusal(
+        context.allowlist_attempt.status_code == 403, context.allowlist_attempt.text
+    )
 
 
 @then("the request is refused")
 def step_impl(context):
-    assert context.allowlist_attempt.status_code == 403, context.allowlist_attempt.text
+    # Shared with kube-driver's attempt-surface scenario: each When-step
+    # records the refusal it observed (see outcomes.py).
+    assert context.refusal.refused, context.refusal.detail
 
 
 @then("the path offered is an audited application-policy change for admin review")

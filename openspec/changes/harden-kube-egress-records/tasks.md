@@ -37,8 +37,8 @@ right reason, implement until they pass, then commit.
 
 ## 4. The admin surface
 
-- [ ] 4.1 kube-driver: the proxy's attempt surface is reachable only by the control plane — create the per-namespace Secret at seal time, require the token on `/attempts`, and present it from the collector — red → green → commit
-- [ ] 4.2 Publish the residual exposure honestly (ADR 0001): record in `hack/conformance/README.md` or the proxy's package doc that the admin-port ingress policy stays permissive by necessity and the token is the actual control, so nobody later reads the NetworkPolicy as the protection
+- [x] 4.1 kube-driver: the proxy's attempt surface is reachable only by the control plane — create the per-namespace Secret at seal time, require the token on `/attempts`, and present it from the collector — red → green → commit
+- [x] 4.2 Publish the residual exposure honestly (ADR 0001): record in `hack/conformance/README.md` or the proxy's package doc that the admin-port ingress policy stays permissive by necessity and the token is the actual control, so nobody later reads the NetworkPolicy as the protection
 
 ## 5. Egress evaluation
 
