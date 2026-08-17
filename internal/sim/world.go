@@ -5,7 +5,6 @@
 package sim
 
 import (
-	"strings"
 	"sync"
 	"time"
 
@@ -236,15 +235,21 @@ func (c *SimCluster) AttemptEgress(namespace, destination string) cluster.Egress
 		// filters the connection. This is N7's silent failure mode.
 		return cluster.EgressResult{Allowed: true, Via: "unfiltered"}
 	}
-	if destination == "cluster-dns" {
+	// "cluster-dns" is the sim's abstract stand-in for the cluster's DNS
+	// service, which arranged scenarios name directly; the real forms are
+	// recognised too, since the real driver answers on those
+	// (DIVERGENCES.md entry 5).
+	if destination == "cluster-dns" || cluster.IsClusterDNSName(destination) {
 		return cluster.EgressResult{Allowed: true, Via: "cluster-dns"}
 	}
-	if !strings.Contains(destination, ".") {
-		// Same-namespace short name: reachable only through a Service of
-		// that name. Cluster DNS resolves Services, not workloads — observed
-		// on the real driver and reconciled here (DIVERGENCES.md entry 1);
-		// the sim previously resolved workload names directly.
-		if _, ok := c.rawObjects[rawKey(namespace, "Service", destination)]; ok {
+	if name, inNamespace := cluster.InNamespaceServiceName(namespace, destination); inNamespace {
+		// A name inside the namespace — short, or qualified the way cluster DNS
+		// resolves it — is reachable only through a Service of that name.
+		// Cluster DNS resolves Services, not workloads: observed on the real
+		// driver and reconciled here (DIVERGENCES.md entries 1 and 5); the sim
+		// previously resolved workload names directly, and treated every
+		// qualified form as an external FQDN.
+		if _, ok := c.rawObjects[rawKey(namespace, "Service", name)]; ok {
 			return cluster.EgressResult{Allowed: true, Via: "in-sandbox"}
 		}
 		return cluster.EgressResult{Allowed: false, Via: "denied"}

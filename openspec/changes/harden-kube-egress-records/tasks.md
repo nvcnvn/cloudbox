@@ -47,7 +47,7 @@ right reason, implement until they pass, then commit.
 
 ## 6. Sim reconciliation
 
-- [ ] 6.1 Confirm no sim divergence arises — the sim records attempts synchronously and cannot lose them, so no `internal/sim/DIVERGENCES.md` entry is expected. If implementation contradicts that expectation, record the divergence and correct `internal/sim/world.go` (conformance-ci, ADR 0008)
+- [x] 6.1 Confirm no sim divergence arises — the sim records attempts synchronously and cannot lose them, so no `internal/sim/DIVERGENCES.md` entry is expected. If implementation contradicts that expectation, record the divergence and correct `internal/sim/world.go` (conformance-ci, ADR 0008)
 
 ## 7. Completion
 

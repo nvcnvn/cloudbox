@@ -368,38 +368,28 @@ func (c *Cluster) namespaceSealed(namespace string) bool {
 	return err == nil
 }
 
-// serviceInNamespace reports whether the destination names a Service of this
-// namespace, in any of the forms cluster DNS resolves it by. Cluster DNS
-// resolves Services, not workloads (sim DIVERGENCES.md entry 1), so the
-// Service object is what makes the destination in-sandbox.
+// serviceInNamespace reports whether the destination names a Service that
+// exists in this namespace. Cluster DNS resolves Services, not workloads (sim
+// DIVERGENCES.md entry 1), so the Service object is what makes the destination
+// in-sandbox; the name parsing is shared with the sim (internal/cluster/dns.go).
 func (c *Cluster) serviceInNamespace(namespace, destination string) bool {
-	labels := strings.Split(destination, ".")
-	switch len(labels) {
-	case 1: // web
-	case 2, 3, 5: // web.<ns> | web.<ns>.svc | web.<ns>.svc.cluster.local
-		if labels[1] != namespace {
-			return false
-		}
-		if len(labels) >= 3 && labels[2] != "svc" {
-			return false
-		}
-		if len(labels) == 5 && (labels[3] != "cluster" || labels[4] != "local") {
-			return false
-		}
-	default:
+	name, ok := cluster.InNamespaceServiceName(namespace, destination)
+	if !ok {
 		return false
 	}
 	cctx, cancel := ctx()
 	defer cancel()
-	_, err := c.clientset.CoreV1().Services(namespace).
-		Get(cctx, labels[0], metav1.GetOptions{})
+	_, err := c.clientset.CoreV1().Services(namespace).Get(cctx, name, metav1.GetOptions{})
 	return err == nil
 }
 
 // isClusterDNS reports whether the destination is the cluster's DNS service —
-// the one destination outside the namespace the seal admits, by name or by the
-// address it resolves to.
+// the one destination outside the namespace the seal admits — by name or by the
+// address it resolves to on this cluster.
 func (c *Cluster) isClusterDNS(destination string) bool {
+	if cluster.IsClusterDNSName(destination) {
+		return true
+	}
 	cctx, cancel := ctx()
 	defer cancel()
 	svc, err := c.clientset.CoreV1().Services("kube-system").
@@ -408,19 +398,7 @@ func (c *Cluster) isClusterDNS(destination string) bool {
 		log.Printf("kube driver: resolving cluster DNS on %s: %v", c.name, err)
 		return false
 	}
-	if svc.Spec.ClusterIP != "" && destination == svc.Spec.ClusterIP {
-		return true
-	}
-	for _, form := range []string{
-		svc.Name + "." + svc.Namespace,
-		svc.Name + "." + svc.Namespace + ".svc",
-		svc.Name + "." + svc.Namespace + ".svc.cluster.local",
-	} {
-		if destination == form {
-			return true
-		}
-	}
-	return false
+	return svc.Spec.ClusterIP != "" && destination == svc.Spec.ClusterIP
 }
 
 // onLiveAllowlist reads the allowlist the namespace's proxy is actually
