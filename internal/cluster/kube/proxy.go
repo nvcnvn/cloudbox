@@ -91,28 +91,40 @@ func (c *Cluster) deployEgressProxy(namespace string) {
 	}
 }
 
+// proxyAttempt is one record as the proxy's admin surface serves it.
+type proxyAttempt struct {
+	Destination string      `json:"destination"`
+	SourceIP    string      `json:"sourceIp"`
+	At          metav1.Time `json:"at"`
+	Allowed     bool        `json:"allowed"`
+}
+
+// proxyAttemptRecord is the /attempts response: the retained attempts plus
+// what the proxy's bound discarded.
+type proxyAttemptRecord struct {
+	Attempts []proxyAttempt `json:"attempts"`
+	Dropped  int            `json:"dropped"`
+}
+
 // EgressAttempts implements the optional cluster.EgressObserver capability:
 // the proxy's records, attributed to workloads by resolving each recorded
-// source IP against the namespace's live pods.
-func (c *Cluster) EgressAttempts(namespace string) []cluster.EgressAttempt {
+// source IP against the namespace's live pods, together with what the proxy's
+// retention bound discarded.
+func (c *Cluster) EgressAttempts(namespace string) cluster.EgressReport {
 	cctx, cancel := ctx()
 	defer cancel()
 	raw, err := c.clientset.CoreV1().Services(namespace).
 		ProxyGet("http", proxyName, "admin", "/attempts", nil).DoRaw(cctx)
 	if err != nil {
 		log.Printf("kube driver: reading egress attempts in %q on %s: %v", namespace, c.name, err)
-		return nil
+		return cluster.EgressReport{}
 	}
-	var records []struct {
-		Destination string `json:"destination"`
-		SourceIP    string `json:"sourceIp"`
-		At          metav1.Time `json:"at"`
-		Allowed     bool   `json:"allowed"`
-	}
-	if err := json.Unmarshal(raw, &records); err != nil {
+	var record proxyAttemptRecord
+	if err := json.Unmarshal(raw, &record); err != nil {
 		log.Printf("kube driver: decoding egress attempts in %q on %s: %v", namespace, c.name, err)
-		return nil
+		return cluster.EgressReport{}
 	}
+	records := record.Attempts
 
 	// Attribute source IPs to workloads via the namespace's live pods.
 	byIP := map[string]string{}
@@ -141,7 +153,11 @@ func (c *Cluster) EgressAttempts(namespace string) []cluster.EgressAttempt {
 			Allowed:     r.Allowed,
 		})
 	}
-	return attempts
+	return cluster.EgressReport{
+		Attempts:  attempts,
+		Dropped:   record.Dropped,
+		Collected: true,
+	}
 }
 
 // The optional capability is actually satisfied.

@@ -99,9 +99,11 @@ class KubeClusterPage:
             return ""
         return result.stdout
 
-    def proxy_attempts(self, namespace):
-        """The egress proxy's recorded attempts, read through the API server's
-        service proxy — the same path the control plane collects them by."""
+    def proxy_attempt_record(self, namespace):
+        """The egress proxy's whole attempt record, read through the API
+        server's service proxy — the same path the control plane collects it
+        by: the attempts it still retains plus the count its retention bound
+        discarded."""
         result = self._kubectl(
             "get", "--raw",
             "/api/v1/namespaces/%s/services/http:cloudbox-egress-proxy:admin/proxy/attempts"
@@ -109,6 +111,14 @@ class KubeClusterPage:
         )
         result.check_returncode()
         return json.loads(result.stdout)
+
+    def proxy_attempts(self, namespace):
+        """Just the retained attempts."""
+        return self.proxy_attempt_record(namespace)["attempts"]
+
+    def proxy_dropped(self, namespace):
+        """How many attempts the proxy's retention bound discarded."""
+        return self.proxy_attempt_record(namespace)["dropped"]
 
     def server_minor(self):
         result = self._kubectl("version", "-o", "json")

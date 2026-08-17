@@ -22,7 +22,7 @@ right reason, implement until they pass, then commit.
 
 ## 1. Proxy retention and truncation
 
-- [ ] 1.1 kube-driver: the proxy's attempt record is bounded and its truncation is reported — add bounded retention with a monotonic dropped counter to `cmd/cloudbox-proxy/main.go`, change `/attempts` to an object carrying attempts plus the dropped count, and surface the discarded count through `EgressAttempts` — red → green → commit
+- [x] 1.1 kube-driver: the proxy's attempt record is bounded and its truncation is reported — add bounded retention with a monotonic dropped counter to `cmd/cloudbox-proxy/main.go`, change `/attempts` to an object carrying attempts plus the dropped count, and surface the discarded count through `EgressAttempts` — red → green → commit
 - [ ] 1.2 The collector accepts both the new object shape and the pre-change bare array, so a namespace sealed before the upgrade keeps reporting until its next re-seal (design Migration Plan). Verify against a proxy deployment left on the old image
 
 ## 2. Collection independent of inspection

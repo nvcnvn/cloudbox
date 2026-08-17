@@ -55,6 +55,15 @@ type Sandbox struct {
 	InheritedSoak time.Duration `json:"-"`
 
 	BlockedEgress         []BlockedAttempt `json:"blockedEgress"`
+	// EgressDropped counts attempts the namespace's egress proxy discarded to
+	// stay inside its retention bound. Truncation is reported, never silent:
+	// with a non-zero count, BlockedEgress is a floor, not a total (N4).
+	EgressDropped int `json:"egressDropped"`
+	// egressDroppedSeen is the proxy's own monotonic counter as of the last
+	// collection, so repeated collections add each drop once. It resets with
+	// the proxy's incarnation, since a fresh process counts from zero.
+	egressDroppedSeen int
+
 	Diagnostics           []Diagnostic     `json:"diagnostics"`
 	SuspendedAutoscalers  []string         `json:"suspendedAutoscalers"`
 	// Datastores maps declared datastore names to their provisioned fidelity
@@ -296,7 +305,18 @@ func (c *Core) refreshBlockedEgressLocked(sb *Sandbox) {
 	if !ok {
 		return
 	}
-	for _, attempt := range observer.EgressAttempts(sb.Namespace) {
+	report := observer.EgressAttempts(sb.Namespace)
+	if !report.Collected {
+		// The proxy could not be read. Silence is not an empty record.
+		return
+	}
+	// What the proxy's bound discarded is added once per drop, not once per
+	// collection: the counter it reports is monotonic within one incarnation.
+	if report.Dropped > sb.egressDroppedSeen {
+		sb.EgressDropped += report.Dropped - sb.egressDroppedSeen
+	}
+	sb.egressDroppedSeen = report.Dropped
+	for _, attempt := range report.Attempts {
 		if attempt.Allowed {
 			continue
 		}

@@ -9,6 +9,7 @@ from behave import given, when, then
 from pages.bundles import (
     ALLOWED_EGRESS_YAML,
     EGRESS_ATTEMPT_YAML,
+    EGRESS_FLOOD_YAML,
     MEMORY_HOG_YAML,
     READY_WORKLOAD_YAML,
     TWO_SERVICES_YAML,
@@ -439,6 +440,58 @@ def step_impl(context):
     logs = wait_for_log_markers(context, "caller", ["DNS:", "CONN:"])
     context.dns_ok = "DNS:OK" in logs
     context.conn_ok = "CONN:OK" in logs
+
+
+# --- Rule: The proxy's attempt record is bounded and its truncation is reported ---
+
+
+@given("a sealed sandbox on a real cluster whose workload makes more blocked attempts "
+       "than the proxy retains")
+def step_impl(context):
+    create_sealed_sandbox(context)
+    context.workload_name = "flooder"
+    context.attempt_destination = "api.other-vendor.com"
+    context.bundles.apply(context.app_name, context.sandbox_name, EGRESS_FLOOD_YAML)
+    context.bundles.last_response.raise_for_status()
+    # Every iteration is a real request through the proxy, so the flood takes
+    # its time; the marker says the workload is past the proxy's bound.
+    wait_for_log_markers(context, context.workload_name, ["FLOOD:DONE"], timeout=420)
+
+
+@when("the control plane collects the proxy's records")
+def step_impl(context):
+    # What the proxy still holds, then what the control plane made of it.
+    context.attempt_record = context.kube.proxy_attempt_record(context.sandbox_name)
+    record = context.sandboxes.record(context.sandbox_name)
+    record.raise_for_status()
+    context.sandbox_record = record.json()
+
+
+@then("the retained attempts are recorded")
+def step_impl(context):
+    retained = [a for a in context.attempt_record["attempts"] if not a["allowed"]]
+    assert retained, "the proxy retained no blocked attempts to collect"
+    recorded = context.sandbox_record["blockedEgress"]
+    assert len(recorded) >= len(retained), (
+        "the control plane recorded %d blocked attempts, fewer than the %d the proxy retains"
+        % (len(recorded), len(retained))
+    )
+    missing = {a["destination"] for a in retained} - {b["destination"] for b in recorded}
+    assert not missing, "retained destinations absent from the sandbox record: %s" % sorted(missing)
+
+
+@then("the number of discarded attempts is reported")
+def step_impl(context):
+    dropped = context.attempt_record["dropped"]
+    assert dropped > 0, (
+        "the proxy reported no discarded attempts, so its bound was never reached "
+        "(%d retained) — the scenario proved nothing"
+        % len(context.attempt_record["attempts"])
+    )
+    assert context.sandbox_record["egressDropped"] >= dropped, (
+        "the proxy discarded %d attempts but the sandbox reports %r"
+        % (dropped, context.sandbox_record["egressDropped"])
+    )
 
 
 # --- Rule: The simulation arrangement surface is absent under the kube driver ---

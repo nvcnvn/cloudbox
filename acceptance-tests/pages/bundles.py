@@ -149,6 +149,41 @@ spec:
               sleep 1000000000
 """
 
+# Makes more blocked attempts than the proxy retains, so its retention bound
+# has to discard some. The iteration count must exceed the proxy's bound
+# (cmd/cloudbox-proxy's -max-attempts default); it is deliberately just above
+# it, since every iteration is a real request through the proxy.
+EGRESS_FLOOD_YAML = """\
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flooder
+  labels: {app: flooder}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: flooder}
+  template:
+    metadata:
+      labels: {app: flooder}
+    spec:
+      containers:
+        - name: flooder
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - >
+              i=0; while [ $i -lt 30 ]; do
+              if nc -w 2 cloudbox-egress-proxy 3128 </dev/null; then break; fi;
+              i=$((i+1)); sleep 2; done;
+              i=0; while [ $i -lt 600 ]; do
+              wget -q -O /dev/null -T 5 http://api.other-vendor.com/ 2>/dev/null;
+              i=$((i+1)); done;
+              echo FLOOD:DONE;
+              sleep 1000000000
+"""
+
 # Fetches one declared external endpoint through the injected egress proxy.
 ALLOWED_EGRESS_YAML = """\
 apiVersion: apps/v1
