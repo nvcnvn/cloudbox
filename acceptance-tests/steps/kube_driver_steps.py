@@ -444,6 +444,59 @@ def step_impl(context):
     context.conn_ok = "CONN:OK" in logs
 
 
+# --- Rule: Egress evaluation reflects live cluster state ---
+
+
+@when("the driver evaluates an attempt to that declared endpoint")
+def step_impl(context):
+    context.egress_evaluation = context.kube.evaluate_egress(
+        context.sandbox_name, context.declared_endpoint
+    )
+
+
+@then("the attempt is reported allowed through the egress proxy")
+def step_impl(context):
+    evaluation = context.egress_evaluation
+    assert evaluation["allowed"] and evaluation["via"] == "egress-proxy", (
+        "the driver did not report %r as proxy-mediated: %s"
+        % (context.declared_endpoint, evaluation)
+    )
+
+
+@when('the driver evaluates an attempt to "{destination}"')
+def step_impl(context, destination):
+    context.attempt_destination = destination
+    context.egress_evaluation = context.kube.evaluate_egress(context.sandbox_name, destination)
+
+
+@then("the attempt is reported denied")
+def step_impl(context):
+    evaluation = context.egress_evaluation
+    assert not evaluation["allowed"] and evaluation["via"] == "denied", (
+        "the driver reported an undeclared destination as allowed: %s" % evaluation
+    )
+
+
+@given("a namespace on a real cluster that carries no seal")
+def step_impl(context):
+    context.unsealed_namespace = context.kube.create_unsealed_namespace()
+
+
+@when("the driver evaluates an attempt from that namespace")
+def step_impl(context):
+    context.egress_evaluation = context.kube.evaluate_egress(
+        context.unsealed_namespace, "example.com"
+    )
+
+
+@then("the attempt is reported unfiltered rather than proxy-mediated")
+def step_impl(context):
+    evaluation = context.egress_evaluation
+    assert evaluation["allowed"] and evaluation["via"] == "unfiltered", (
+        "an unsealed namespace was not reported unfiltered: %s" % evaluation
+    )
+
+
 # --- Rule: Attempt collection does not depend on a sandbox being inspected ---
 
 # Long enough for the control plane's own collection to have run at least

@@ -129,6 +129,14 @@ def after_scenario(context, scenario):
                 context.sandboxes.destroy(sandbox)
             except Exception:
                 pass
+        # Namespaces a scenario made outside the product (an unsealed namespace
+        # to evaluate against) are not sandboxes, so nothing else reclaims them.
+        namespace = getattr(context, "unsealed_namespace", None)
+        if namespace:
+            try:
+                context.kube.delete_namespace(namespace)
+            except Exception:
+                pass
 
 
 def before_scenario(context, scenario):

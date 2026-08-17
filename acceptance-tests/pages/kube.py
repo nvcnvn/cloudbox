@@ -17,8 +17,11 @@ import os
 import subprocess
 import tempfile
 import uuid
+from pathlib import Path
 
 import requests
+
+REPO = Path(__file__).resolve().parents[2]
 
 # The proxy's attempt surface and the credential it requires (the control
 # plane's own collection path presents the same header).
@@ -101,6 +104,40 @@ class KubeClusterPage:
 
     def namespace_exists(self, namespace):
         return self._kubectl("get", "namespace", namespace).returncode == 0
+
+    def create_unsealed_namespace(self):
+        """A plain namespace with no seal on it — nothing the product manages."""
+        name = "cloudbox-unsealed-%s" % uuid.uuid4().hex[:6]
+        self._kubectl("create", "namespace", name).check_returncode()
+        return name
+
+    def delete_namespace(self, namespace):
+        self._kubectl("delete", "namespace", namespace, "--wait=false")
+
+    def evaluate_egress(self, namespace, destination):
+        """Ask the driver how it evaluates one attempt from a namespace.
+
+        The cluster contract's AttemptEgress has no product route under the kube
+        driver (its only exposure is the sim-only /simctl surface, ADR 0008), so
+        this drives the contract method through the conformance helper rather
+        than the product growing an endpoint for the test's benefit. Returns the
+        driver's EgressResult.
+        """
+        result = subprocess.run(
+            [
+                "go", "run", "./hack/conformance/egress-eval",
+                "-context", self.name,
+                "-namespace", namespace,
+                "-destination", destination,
+            ],
+            cwd=str(REPO), capture_output=True, text=True, timeout=300,
+        )
+        if result.returncode != 0:
+            raise AssertionError(
+                "asking the driver to evaluate %r from %r failed:\n%s"
+                % (destination, namespace, result.stderr)
+            )
+        return json.loads(result.stdout)
 
     def workload_logs(self, namespace, workload):
         """The pods' logs for one admitted workload (app=<name> label).

@@ -7,6 +7,7 @@ package kube
 import (
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -299,9 +300,149 @@ func (c *Cluster) canaryResult(namespace string) (connected, completed bool) {
 	return false, false
 }
 
-// AttemptEgress evaluates one connection attempt under whatever the cluster
-// actually enforces. Implemented by task 3.7; nothing calls it under the kube
-// driver until then (its only exposure is the sim-only /simctl surface).
+// AttemptEgress evaluates one connection attempt against what the cluster
+// actually enforces for the namespace: whether it carries the seal, what its
+// live allowlist says, and what is reachable inside it. It MUST NOT report an
+// attempt it did not evaluate as allowed — an unevaluated "allowed,
+// unfiltered" is a false containment claim, which is the one thing this driver
+// is not allowed to produce.
+//
+// BOUNDED CLAIM: this evaluates policy, not a packet. It answers what the
+// cluster's own configuration admits for this namespace right now; it does not
+// send traffic and so cannot catch a CNI that accepted the policies and stopped
+// enforcing them. That claim belongs to ProbeEnforcement, which proves denial
+// with a live canary before any sandbox reports itself sealed, and to the
+// conformance egress scenarios, which assert from a real workload's own output.
+// Packet-level enforcement stays the probe's claim; this is the policy's.
 func (c *Cluster) AttemptEgress(namespace, destination string) cluster.EgressResult {
-	return cluster.EgressResult{Allowed: true, Via: "unfiltered"}
+	denied := cluster.EgressResult{Allowed: false, Via: "denied"}
+	dest := strings.TrimSuffix(strings.TrimSpace(destination), ".")
+	if dest == "" {
+		return denied
+	}
+	if !c.namespaceExists(namespace) {
+		// No namespace, nothing running in it, nothing to report as allowed.
+		return denied
+	}
+	if !c.namespaceSealed(namespace) {
+		// Honest about the absence of a seal rather than reporting filtering
+		// that is not in force (N7's silent failure mode is the reason this
+		// distinction matters).
+		return cluster.EgressResult{Allowed: true, Via: "unfiltered"}
+	}
+	if c.serviceInNamespace(namespace, dest) {
+		return cluster.EgressResult{Allowed: true, Via: "in-sandbox"}
+	}
+	if c.isClusterDNS(dest) {
+		return cluster.EgressResult{Allowed: true, Via: "cluster-dns"}
+	}
+	if c.onLiveAllowlist(namespace, dest) {
+		// The seal admits no direct egress, so an allowlisted FQDN is reachable
+		// only through the proxy that enforces the allowlist (ADR 0001).
+		return cluster.EgressResult{Allowed: true, Via: "egress-proxy"}
+	}
+	return denied
+}
+
+func (c *Cluster) namespaceExists(name string) bool {
+	cctx, cancel := ctx()
+	defer cancel()
+	_, err := c.clientset.CoreV1().Namespaces().Get(cctx, name, metav1.GetOptions{})
+	if err != nil && !apierrors.IsNotFound(err) {
+		log.Printf("kube driver: reading namespace %q on %s: %v", name, c.name, err)
+	}
+	return err == nil
+}
+
+// namespaceSealed reports whether the default-deny floor is actually installed
+// on the namespace — the seal's presence is read from the cluster, never
+// assumed from the control plane's own record.
+func (c *Cluster) namespaceSealed(namespace string) bool {
+	cctx, cancel := ctx()
+	defer cancel()
+	_, err := c.clientset.NetworkingV1().NetworkPolicies(namespace).
+		Get(cctx, "cloudbox-default-deny", metav1.GetOptions{})
+	if err != nil && !apierrors.IsNotFound(err) {
+		log.Printf("kube driver: reading the seal on %q on %s: %v", namespace, c.name, err)
+	}
+	return err == nil
+}
+
+// serviceInNamespace reports whether the destination names a Service of this
+// namespace, in any of the forms cluster DNS resolves it by. Cluster DNS
+// resolves Services, not workloads (sim DIVERGENCES.md entry 1), so the
+// Service object is what makes the destination in-sandbox.
+func (c *Cluster) serviceInNamespace(namespace, destination string) bool {
+	labels := strings.Split(destination, ".")
+	switch len(labels) {
+	case 1: // web
+	case 2, 3, 5: // web.<ns> | web.<ns>.svc | web.<ns>.svc.cluster.local
+		if labels[1] != namespace {
+			return false
+		}
+		if len(labels) >= 3 && labels[2] != "svc" {
+			return false
+		}
+		if len(labels) == 5 && (labels[3] != "cluster" || labels[4] != "local") {
+			return false
+		}
+	default:
+		return false
+	}
+	cctx, cancel := ctx()
+	defer cancel()
+	_, err := c.clientset.CoreV1().Services(namespace).
+		Get(cctx, labels[0], metav1.GetOptions{})
+	return err == nil
+}
+
+// isClusterDNS reports whether the destination is the cluster's DNS service —
+// the one destination outside the namespace the seal admits, by name or by the
+// address it resolves to.
+func (c *Cluster) isClusterDNS(destination string) bool {
+	cctx, cancel := ctx()
+	defer cancel()
+	svc, err := c.clientset.CoreV1().Services("kube-system").
+		Get(cctx, "kube-dns", metav1.GetOptions{})
+	if err != nil {
+		log.Printf("kube driver: resolving cluster DNS on %s: %v", c.name, err)
+		return false
+	}
+	if svc.Spec.ClusterIP != "" && destination == svc.Spec.ClusterIP {
+		return true
+	}
+	for _, form := range []string{
+		svc.Name + "." + svc.Namespace,
+		svc.Name + "." + svc.Namespace + ".svc",
+		svc.Name + "." + svc.Namespace + ".svc.cluster.local",
+	} {
+		if destination == form {
+			return true
+		}
+	}
+	return false
+}
+
+// onLiveAllowlist reads the allowlist the namespace's proxy is actually
+// enforcing, not the application record it was sealed from: a re-seal that
+// failed to land must not make this report an allowlist that is not in force.
+// Exact FQDN match — wildcard and subdomain entries are deliberately not
+// allowlist semantics in v1.
+func (c *Cluster) onLiveAllowlist(namespace, destination string) bool {
+	cctx, cancel := ctx()
+	defer cancel()
+	cm, err := c.clientset.CoreV1().ConfigMaps(namespace).
+		Get(cctx, allowlistConfigMap, metav1.GetOptions{})
+	if err != nil {
+		if !apierrors.IsNotFound(err) {
+			log.Printf("kube driver: reading the allowlist in %q on %s: %v", namespace, c.name, err)
+		}
+		return false
+	}
+	for _, line := range strings.Split(cm.Data["allowlist"], "\n") {
+		if fqdn := strings.TrimSpace(line); fqdn != "" && fqdn == destination {
+			return true
+		}
+	}
+	return false
 }

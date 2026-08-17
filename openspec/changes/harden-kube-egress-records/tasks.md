@@ -42,8 +42,8 @@ right reason, implement until they pass, then commit.
 
 ## 5. Egress evaluation
 
-- [ ] 5.1 kube-driver: egress evaluation reflects live cluster state — replace the unconditional `{Allowed: true, Via: "unfiltered"}` stub in `internal/cluster/kube/seal.go` with evaluation against the namespace's seal and live allowlist per design D1's table, and delete the stale "implemented by task 3.7" comment — red → green → commit
-- [ ] 5.2 Confirm the bounded claim is stated where a reader will meet it: `AttemptEgress` evaluates policy, not a packet, and packet-level enforcement remains the probe's claim
+- [x] 5.1 kube-driver: egress evaluation reflects live cluster state — replace the unconditional `{Allowed: true, Via: "unfiltered"}` stub in `internal/cluster/kube/seal.go` with evaluation against the namespace's seal and live allowlist per design D1's table, and delete the stale "implemented by task 3.7" comment — red → green → commit
+- [x] 5.2 Confirm the bounded claim is stated where a reader will meet it: `AttemptEgress` evaluates policy, not a packet, and packet-level enforcement remains the probe's claim
 
 ## 6. Sim reconciliation
 
