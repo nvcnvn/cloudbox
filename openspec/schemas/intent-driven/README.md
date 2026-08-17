@@ -132,6 +132,5 @@ This schema declares its companion skills in `skills.txt`; they are installed au
 - `gherkin-authoring` — writing and reviewing Gherkin/BDD scenarios.
 - `glossary` — keeping domain/technical terms consistent across artifacts.
 - `grill-me` — relentless interviewing to stress-test a plan or design.
-- `openspec-git-discipline` — git hygiene for OpenSpec propose/apply/archive workflows.
 
 For more schemas, refer to https://github.com/intent-driven-dev/openspec-schemas.
