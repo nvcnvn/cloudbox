@@ -10,6 +10,7 @@ from pages.bundles import (
     ALLOWED_EGRESS_YAML,
     EGRESS_ATTEMPT_YAML,
     EGRESS_FLOOD_YAML,
+    EGRESS_LOOP_YAML,
     MEMORY_HOG_YAML,
     READY_WORKLOAD_YAML,
     TWO_SERVICES_YAML,
@@ -530,6 +531,74 @@ def step_impl(context):
     assert context.sandbox_record["egressDropped"] >= dropped, (
         "the proxy discarded %d attempts but the sandbox reports %r"
         % (dropped, context.sandbox_record["egressDropped"])
+    )
+
+
+# --- Rule: Unrecoverable record loss is surfaced, never absorbed ---
+
+
+def lose_uncollected_records(context):
+    """Arrange a sandbox whose egress proxy genuinely lost records: a workload
+    attempting continuously, so the proxy always holds attempts nobody has
+    collected yet, and then a restart that takes them with it."""
+    create_sealed_sandbox(context)
+    context.workload_name = "looper"
+    context.attempt_destination = "api.other-vendor.com"
+    context.bundles.apply(context.app_name, context.sandbox_name, EGRESS_LOOP_YAML)
+    context.bundles.last_response.raise_for_status()
+    wait_for_log_markers(context, context.workload_name, ["LOOP:ATTEMPTED"])
+    # Let the control plane collect at least once, so it knows which proxy
+    # process the record came from; the workload keeps attempting throughout,
+    # so attempts made after that collection are the ones the restart loses.
+    time.sleep(COLLECTION_DWELL_SECONDS)
+    context.kube.restart_egress_proxy(context.sandbox_name)
+
+
+@given("a sealed sandbox on a real cluster whose egress proxy lost uncollected records")
+def step_impl(context):
+    lose_uncollected_records(context)
+
+
+@when("the sandbox status is inspected")
+def step_impl(context):
+    record = context.sandboxes.record(context.sandbox_name)
+    record.raise_for_status()
+    context.sandbox_record = record.json()
+
+
+@then("the egress record is reported incomplete")
+def step_impl(context):
+    assert context.sandbox_record["egressRecordIncomplete"], (
+        "the sandbox presents its egress record as complete after losing records: %s"
+        % context.sandbox_record
+    )
+
+
+@given("a sandbox run whose egress record is incomplete")
+def step_impl(context):
+    lose_uncollected_records(context)
+    record = context.sandboxes.record(context.sandbox_name)
+    record.raise_for_status()
+    assert record.json()["egressRecordIncomplete"], (
+        "the arrangement did not produce an incomplete egress record: %s" % record.json()
+    )
+
+
+# "When the control plane assembles the run's evidence" is already defined by
+# the evidence capability's steps; the same product action, so it is reused.
+
+
+@then("the evidence states that the egress-violation count is incomplete")
+def step_impl(context):
+    assert context.evidence["egressRecordIncomplete"], (
+        "evidence presents the egress-violation count as complete: %s" % context.evidence
+    )
+    assert context.evidence.get("egressRecordGap"), (
+        "evidence does not say what was lost: %s" % context.evidence
+    )
+    summary = context.evidence["summary"]
+    assert "INCOMPLETE egress record" in summary, (
+        "the evidence summary reads as a complete count: %r" % summary
     )
 
 

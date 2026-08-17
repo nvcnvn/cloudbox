@@ -33,6 +33,12 @@ type Evidence struct {
 	Diff                 []DiffLine         `json:"diff"`
 	SealStatus           string             `json:"sealStatus"` // "sealed" | "not-sealed"
 	EgressViolations     int                `json:"egressViolations"`
+	// EgressRecordIncomplete says EgressViolations is a floor rather than a
+	// total: records were lost, so the count cannot be presented as complete.
+	// The alternative — a quietly diminished number in a signed artifact — is
+	// worse than no number, because it is trusted (ADR 0004, N4).
+	EgressRecordIncomplete bool   `json:"egressRecordIncomplete"`
+	EgressRecordGap        string `json:"egressRecordGap,omitempty"`
 	SubstrateDigest      string             `json:"substrateDigest,omitempty"`
 	SubstrateMatch       bool               `json:"substrateMatch"`
 	Fidelity             map[string]string  `json:"fidelity"` // datastore → level (D2)
@@ -89,6 +95,8 @@ func (c *Core) snapshotEvidence(sb *Sandbox) *Evidence {
 		ev.SealStatus = "not-sealed"
 	}
 	ev.EgressViolations = len(sb.BlockedEgress)
+	ev.EgressRecordIncomplete = sb.EgressRecordIncomplete
+	ev.EgressRecordGap = egressRecordGap(sb)
 	ev.ObservedHealthySeconds = c.observedHealthy(sb).Seconds()
 	ev.SubstrateDigest = c.sandboxSubstrateDigest(sb)
 
@@ -230,6 +238,19 @@ func renderSummary(ev *Evidence) string {
 	violations := "zero undeclared dependency attempts"
 	if ev.EgressViolations > 0 {
 		violations = fmt.Sprintf("%d undeclared dependency attempts recorded", ev.EgressViolations)
+	}
+	if ev.EgressRecordIncomplete {
+		// The count is a floor, and the wording says so rather than letting a
+		// diminished number read as a complete one (G6).
+		if ev.EgressViolations > 0 {
+			violations = fmt.Sprintf(
+				"at least %d undeclared dependency attempts recorded — an INCOMPLETE egress record (%s)",
+				ev.EgressViolations, ev.EgressRecordGap)
+		} else {
+			violations = fmt.Sprintf(
+				"an INCOMPLETE egress record: no undeclared dependency attempt survived collection, so zero cannot be claimed (%s)",
+				ev.EgressRecordGap)
+		}
 	}
 	substrate := "a substrate matching production"
 	if !ev.SubstrateMatch {

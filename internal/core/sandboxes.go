@@ -6,6 +6,7 @@ package core
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"cloudbox/internal/cluster"
@@ -63,6 +64,20 @@ type Sandbox struct {
 	// collection, so repeated collections add each drop once. It resets with
 	// the proxy's incarnation, since a fresh process counts from zero.
 	egressDroppedSeen int
+	// EgressProxyRestarts counts proxy restarts seen after a collection. The
+	// record lives in the proxy's memory, so a restart takes whatever was not
+	// yet collected with it.
+	EgressProxyRestarts int `json:"egressProxyRestarts"`
+	// EgressRecordIncomplete says the control plane cannot claim this
+	// sandbox's egress record is complete — attempts were dropped or a proxy
+	// restarted holding uncollected ones. Deliberately conservative: a restart
+	// that happened to lose nothing still marks the record incomplete, because
+	// a stateless proxy cannot prove the negative. Admitting the doubt is the
+	// only honest option when the alternative is claiming a completeness that
+	// cannot be demonstrated (N4).
+	EgressRecordIncomplete bool `json:"egressRecordIncomplete"`
+	// egressIncarnation is the proxy process the last collection came from.
+	egressIncarnation string
 
 	Diagnostics           []Diagnostic     `json:"diagnostics"`
 	SuspendedAutoscalers  []string         `json:"suspendedAutoscalers"`
@@ -344,8 +359,20 @@ func (c *Core) refreshBlockedEgressLocked(sb *Sandbox) {
 	}
 	report := observer.EgressAttempts(sb.Namespace)
 	if !report.Collected {
-		// The proxy could not be read. Silence is not an empty record.
+		// The proxy could not be read. Silence is not an empty record, and it
+		// is not a restart either.
 		return
+	}
+	// A different process is answering than the one the last collection came
+	// from: the proxy restarted, and anything it had not handed over is gone.
+	// Its drop counter starts from zero again with it.
+	if sb.egressIncarnation != "" && report.Incarnation != "" &&
+		report.Incarnation != sb.egressIncarnation {
+		sb.EgressProxyRestarts++
+		sb.egressDroppedSeen = 0
+	}
+	if report.Incarnation != "" {
+		sb.egressIncarnation = report.Incarnation
 	}
 	// What the proxy's bound discarded is added once per drop, not once per
 	// collection: the counter it reports is monotonic within one incarnation.
@@ -353,6 +380,7 @@ func (c *Core) refreshBlockedEgressLocked(sb *Sandbox) {
 		sb.EgressDropped += report.Dropped - sb.egressDroppedSeen
 	}
 	sb.egressDroppedSeen = report.Dropped
+	sb.EgressRecordIncomplete = sb.EgressDropped > 0 || sb.EgressProxyRestarts > 0
 	for _, attempt := range report.Attempts {
 		if attempt.Allowed {
 			continue
@@ -372,6 +400,30 @@ func (c *Core) refreshBlockedEgressLocked(sb *Sandbox) {
 			})
 		}
 	}
+}
+
+// egressRecordGap states why a sandbox's egress record cannot be claimed
+// complete, in the terms the loss actually happened in. Empty when the record
+// is whole. This is the one place the gap is worded, so the sandbox record and
+// the run's evidence say the same thing.
+func egressRecordGap(sb *Sandbox) string {
+	var parts []string
+	if sb.EgressProxyRestarts > 0 {
+		restarts := "the egress proxy restarted"
+		if sb.EgressProxyRestarts > 1 {
+			restarts = fmt.Sprintf("the egress proxy restarted %d times", sb.EgressProxyRestarts)
+		}
+		parts = append(parts, restarts+
+			" holding records that had not been collected; what it held is unrecoverable")
+	}
+	if sb.EgressDropped > 0 {
+		parts = append(parts, fmt.Sprintf(
+			"the proxy's retention bound discarded %d attempt(s)", sb.EgressDropped))
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return strings.Join(parts, "; ")
 }
 
 // refreshObservedDiagnosticsLocked folds cluster-observed workload failures

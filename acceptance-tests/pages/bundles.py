@@ -149,6 +149,39 @@ spec:
               sleep 1000000000
 """
 
+# Attempts a blocked destination continuously, so at any instant the proxy
+# holds attempts the control plane has not collected yet. Restarting the proxy
+# under this workload loses real records, rather than only being conservatively
+# marked as possibly lossy.
+EGRESS_LOOP_YAML = """\
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: looper
+  labels: {app: looper}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: looper}
+  template:
+    metadata:
+      labels: {app: looper}
+    spec:
+      containers:
+        - name: looper
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - >
+              i=0; while [ $i -lt 30 ]; do
+              if nc -w 2 cloudbox-egress-proxy 3128 </dev/null; then break; fi;
+              i=$((i+1)); sleep 2; done;
+              while true; do
+              wget -q -O /dev/null -T 5 http://api.other-vendor.com/ 2>/dev/null;
+              echo LOOP:ATTEMPTED; sleep 1; done
+"""
+
 # Makes more blocked attempts than the proxy retains, so its retention bound
 # has to discard some. The iteration count must exceed the proxy's bound
 # (cmd/cloudbox-proxy's -max-attempts default); it is deliberately just above

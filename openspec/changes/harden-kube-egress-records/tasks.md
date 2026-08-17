@@ -33,7 +33,7 @@ right reason, implement until they pass, then commit.
 ## 3. Restart detection and honest incompleteness
 
 - [x] 3.1 Add the proxy's startup incarnation identifier to the `/attempts` response and carry it through `EgressAttempts`; give the proxy deployment the resource requests, limits and readiness probe that keep a restart an event rather than routine
-- [ ] 3.2 kube-driver: unrecoverable record loss is surfaced, never absorbed — an incarnation change after a prior collection marks the sandbox's egress record incomplete, and the incompleteness reaches sandbox status and the run's evidence rather than lowering the violation count — red → green → commit
+- [x] 3.2 kube-driver: unrecoverable record loss is surfaced, never absorbed — an incarnation change after a prior collection marks the sandbox's egress record incomplete, and the incompleteness reaches sandbox status and the run's evidence rather than lowering the violation count — red → green → commit
 
 ## 4. The admin surface
 
