@@ -120,6 +120,22 @@ class KubeClusterPage:
         """How many attempts the proxy's retention bound discarded."""
         return self.proxy_attempt_record(namespace)["dropped"]
 
+    def restart_egress_proxy(self, namespace):
+        """Delete the namespace's egress proxy pod and wait for its
+        replacement to be ready — a real restart, losing whatever the process
+        held in memory."""
+        result = self._kubectl(
+            "delete", "pods", "-n", namespace,
+            "-l", "cloudbox.dev/component=egress-proxy", "--wait=true",
+            timeout=180,
+        )
+        result.check_returncode()
+        result = self._kubectl(
+            "rollout", "status", "deployment/cloudbox-egress-proxy",
+            "-n", namespace, "--timeout=180s", timeout=200,
+        )
+        result.check_returncode()
+
     def server_minor(self):
         result = self._kubectl("version", "-o", "json")
         result.check_returncode()

@@ -49,6 +49,15 @@ func NewWithDriver(driver cluster.Driver) *Server {
 			s.core.Tick()
 		}
 	}()
+	// One collector for the whole fleet (N4): the egress proxies hold their
+	// attempt records in memory, so collection cannot wait for someone to
+	// read the sandbox. The sim path needs none — it records attempts
+	// synchronously and cannot lose them.
+	go func() {
+		for range time.Tick(core.EgressCollectionInterval) {
+			s.core.CollectEgress()
+		}
+	}()
 	return s
 }
 

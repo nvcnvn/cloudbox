@@ -286,6 +286,43 @@ func (c *Core) SandboxWorkloads(name string) ([]cluster.Workload, error) {
 	return host.Workloads(sb.Namespace), nil
 }
 
+// EgressCollectionInterval is how often the control plane collects the egress
+// proxies' attempt records.
+//
+// 15s, settled by measurement on the conformance cluster rather than by taste.
+// The interval buys two things and costs one. It bounds the window of loss: a
+// proxy that dies takes at most one interval of uncollected attempts with it,
+// and that loss is surfaced rather than absorbed (a restart marks the record
+// incomplete), so the interval does not have to beat pod rescheduling — it
+// only has to keep the window small. It also has to be short enough for the
+// conformance run to observe collection happening without inspecting the
+// sandbox, which it does by dwelling three intervals.
+//
+// The cost is one service-proxy read per sealed sandbox per round, measured at
+// ~30ms against the enforcing Kind cluster, and the round runs serially. At
+// 15s that is well under 1% duty for the fleet sizes this driver serves. The
+// honest limit: a fleet large enough for a round to approach the interval
+// needs collection moved off the core lock before the interval is shortened,
+// because a round currently holds it for its whole duration.
+const EgressCollectionInterval = 15 * time.Second
+
+// CollectEgress folds every live sandbox's egress-proxy record into the
+// control plane. Collection MUST NOT depend on someone reading the sandbox:
+// the proxy holds its attempts in memory, so an uninspected sandbox whose
+// proxy restarts loses whatever was never collected, and the run's evidence
+// then reports fewer violations than actually happened (N4). Reads still
+// refresh (refreshBlockedEgressLocked) — that path is no longer the only one.
+func (c *Core) CollectEgress() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, sb := range c.sandboxes {
+		if sb.State == "destroyed" || !sb.Sealed {
+			continue
+		}
+		c.refreshBlockedEgressLocked(sb)
+	}
+}
+
 // refreshBlockedEgressLocked folds the egress proxy's observed denials into
 // the sandbox's blocked-egress record (N4). The sim driver records attempts
 // synchronously through core.AttemptEgress; on a real cluster the product

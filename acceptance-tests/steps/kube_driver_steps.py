@@ -442,6 +442,45 @@ def step_impl(context):
     context.conn_ok = "CONN:OK" in logs
 
 
+# --- Rule: Attempt collection does not depend on a sandbox being inspected ---
+
+# Long enough for the control plane's own collection to have run at least
+# once, since this Rule is about what happens with NO inspection to trigger
+# it. Nothing here reads the sandbox before the restart; if the dwell were too
+# short the scenario fails, never passes vacuously.
+COLLECTION_DWELL_SECONDS = 45
+
+
+@given("the workload has attempted a destination outside the allowlist")
+def step_impl(context):
+    context.attempt_destination = "api.other-vendor.com"
+    # The workload's own output, not the product's record: at this point
+    # nothing has inspected the sandbox.
+    wait_for_log_markers(context, context.workload_name, ["PROXY:DENIED"])
+
+
+@when("the egress proxy restarts before the sandbox is inspected")
+def step_impl(context):
+    time.sleep(COLLECTION_DWELL_SECONDS)
+    context.kube.restart_egress_proxy(context.sandbox_name)
+
+
+@then("the blocked attempt is still recorded with its destination and attribution")
+def step_impl(context):
+    record = context.sandboxes.record(context.sandbox_name)
+    record.raise_for_status()
+    blocked = record.json()["blockedEgress"]
+    matching = [
+        b for b in blocked
+        if b["destination"] == context.attempt_destination
+        and b["workload"] == context.workload_name
+    ]
+    assert matching, (
+        "the attempt to %r by %r did not survive the proxy restart: %s"
+        % (context.attempt_destination, context.workload_name, blocked)
+    )
+
+
 # --- Rule: The proxy's attempt record is bounded and its truncation is reported ---
 
 

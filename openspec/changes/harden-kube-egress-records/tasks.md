@@ -27,8 +27,8 @@ right reason, implement until they pass, then commit.
 
 ## 2. Collection independent of inspection
 
-- [ ] 2.1 kube-driver: attempt collection does not depend on a sandbox being inspected — add the single control-plane collector iterating sealed sandboxes on an interval, folding records through the existing `cluster.EgressObserver` capability; `refreshBlockedEgressLocked` stays for read-time freshness but stops being the only path — red → green → commit
-- [ ] 2.2 Settle the collection interval against conformance runtime and API-server load, and record the value chosen with its reason. Resolves design Open Question 3
+- [x] 2.1 kube-driver: attempt collection does not depend on a sandbox being inspected — add the single control-plane collector iterating sealed sandboxes on an interval, folding records through the existing `cluster.EgressObserver` capability; `refreshBlockedEgressLocked` stays for read-time freshness but stops being the only path — red → green → commit
+- [x] 2.2 Settle the collection interval against conformance runtime and API-server load, and record the value chosen with its reason. Resolves design Open Question 3
 
 ## 3. Restart detection and honest incompleteness
 
