@@ -106,6 +106,25 @@ type proxyAttemptRecord struct {
 	Dropped  int            `json:"dropped"`
 }
 
+// decodeAttemptRecord accepts both shapes the admin surface can serve. A
+// namespace sealed before this change runs an older proxy image that answers
+// with a bare array, and its proxy is only replaced by a re-seal; the
+// collector keeps reporting for it rather than logging a decode failure and
+// silently recording nothing. An older proxy has no drop counter, so what it
+// reports is all it can account for.
+func decodeAttemptRecord(raw []byte) (proxyAttemptRecord, error) {
+	var record proxyAttemptRecord
+	objectErr := json.Unmarshal(raw, &record)
+	if objectErr == nil {
+		return record, nil
+	}
+	var preChange []proxyAttempt
+	if err := json.Unmarshal(raw, &preChange); err == nil {
+		return proxyAttemptRecord{Attempts: preChange}, nil
+	}
+	return proxyAttemptRecord{}, objectErr
+}
+
 // EgressAttempts implements the optional cluster.EgressObserver capability:
 // the proxy's records, attributed to workloads by resolving each recorded
 // source IP against the namespace's live pods, together with what the proxy's
@@ -119,8 +138,8 @@ func (c *Cluster) EgressAttempts(namespace string) cluster.EgressReport {
 		log.Printf("kube driver: reading egress attempts in %q on %s: %v", namespace, c.name, err)
 		return cluster.EgressReport{}
 	}
-	var record proxyAttemptRecord
-	if err := json.Unmarshal(raw, &record); err != nil {
+	record, err := decodeAttemptRecord(raw)
+	if err != nil {
 		log.Printf("kube driver: decoding egress attempts in %q on %s: %v", namespace, c.name, err)
 		return cluster.EgressReport{}
 	}
