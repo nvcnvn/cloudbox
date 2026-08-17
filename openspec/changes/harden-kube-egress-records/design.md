@@ -187,14 +187,64 @@ revert steps 1–2.
    model (D2) but redefines `evidence.EgressViolations` from attempts to
    distinct destinations. That is a `evidence` requirement change and needs its
    own proposal. Deferred deliberately, not overlooked.
+
+   **Carried forward, unresolved.** Implementation left the question exactly as
+   posed, and produced the evidence for it: with retention bounded at 512 raw
+   records, the conformance workload that retries one blocked destination in a
+   loop exhausts the bound in about 600 attempts, after which the sandbox
+   reports an incomplete egress record. That is honest but noisy, and it is
+   precisely the case aggregating by (destination, source) would fix — one entry
+   with first-seen, last-seen and a count, instead of 512 near-identical rows.
+   It stays out of this change because `evidence.EgressViolations` already
+   appears in minted evidence: changing what that number counts is a change to
+   the `evidence` capability's meaning, and the proposal that makes it must say
+   so. The follow-up therefore has both a motive (bound exhaustion on looping
+   workloads is a real pattern, not a hypothetical) and a cost (a requirement
+   change in a signed artifact).
+
 2. **Should an incomplete egress record refuse evidence rather than annotate
    it?** The probe-failure path refuses evidence outright (409, "no evidence").
    An incomplete containment record is a weaker defect than an unproven seal,
    so this design annotates. If review reads ADR 0004 as requiring that minted
    evidence be complete rather than merely honest about its gaps, this becomes
    a refusal and the specs change accordingly.
+
+   **Resolved as designed: annotate.** The distinction that settled it is what
+   each defect invalidates. An unproven seal invalidates every containment
+   claim in the artifact, so there is nothing honest left to mint — hence the
+   409. An incomplete attempt record invalidates one number; the rest of the
+   run (what ran, at what fidelity, for how long, with what witnessed activity)
+   is unaffected and still worth recording. So evidence is minted, states the
+   gap (`egressRecordIncomplete`, `egressRecordGap`), and words the count as a
+   floor: "at least N undeclared dependency attempts recorded — an INCOMPLETE
+   egress record (…)".
+
+   Two consequences worth being explicit about, since both are places a later
+   reader might expect something else. Incompleteness does **not** set
+   `Valid: false`: the evidence is honest about its gap rather than invalid,
+   which is the annotate answer applied consistently. And the count is never
+   silently reduced — a run whose records were all lost reports an incomplete
+   record rather than "zero undeclared dependency attempts", because zero is the
+   one claim the lost records cannot support. If review reads ADR 0004 more
+   strictly than this, the change is to invalidate rather than annotate, and the
+   `evidence` capability's requirements — not just this driver's — are what
+   would move.
+
 3. **Collection interval.** 15s is proposed as short relative to pod restart
    timing; to be confirmed against conformance runtime and API-server load.
+
+   **Resolved: 15s**, with the reasoning recorded beside
+   `core.EgressCollectionInterval` where a reader changing it will meet it. Two
+   findings adjusted the framing. The interval does not need to beat pod
+   rescheduling: a restart's loss is surfaced (D4), so the interval only has to
+   keep the window of loss small, not eliminate it. And the measured cost is one
+   service-proxy read per sealed sandbox per round at ~30ms against the
+   enforcing Kind cluster — well under 1% duty at this interval — with one
+   honest limit stated in the code: a round holds the core lock for its
+   duration, so a fleet large enough for a round to approach the interval needs
+   collection moved off that lock before the interval is shortened. On the
+   conformance side, 15s lets the restart scenario dwell three intervals and
+   still finish in a reasonable time.
 
 No in-force ADR needs revisiting. This change operates inside ADR 0001's proxy
 mechanism and ADR 0008's frozen contract, and contradicts neither.

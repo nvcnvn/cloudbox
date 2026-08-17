@@ -51,8 +51,8 @@ right reason, implement until they pass, then commit.
 
 ## 7. Completion
 
-- [ ] 7.1 Default run green: `make acceptance` passes with zero pending or undefined steps, and no conformance-tagged scenario is attempted or reported as a failure
-- [ ] 7.2 Conformance run green: `make conformance` passes against Kind with an enforcing CNI, and the enforcement gate still refuses the non-enforcing cluster in both directions
-- [ ] 7.3 Frozen-contract check: `internal/cluster/cluster.go` is byte-identical to its pre-change state; every `/simctl/*` route is still unreachable under `--driver kube`
-- [ ] 7.4 Verify the composition: `.extracted/` rebuilt, nothing loaded from `openspec/changes/archive/`, no duplicate scenarios between this change's delta and the `kube-driver` source-of-truth spec, composition report clean
-- [ ] 7.5 Resolve or explicitly carry forward design Open Questions 1 (aggregation and the meaning of `evidence.EgressViolations`) and 2 (whether an incomplete record should refuse evidence rather than annotate it)
+- [x] 7.1 Default run green: `make acceptance` passes with zero pending or undefined steps, and no conformance-tagged scenario is attempted or reported as a failure
+- [x] 7.2 Conformance run green: `make conformance` passes against Kind with an enforcing CNI, and the enforcement gate still refuses the non-enforcing cluster in both directions
+- [x] 7.3 Frozen-contract check: `internal/cluster/cluster.go` is byte-identical to its pre-change state; every `/simctl/*` route is still unreachable under `--driver kube`
+- [x] 7.4 Verify the composition: `.extracted/` rebuilt, nothing loaded from `openspec/changes/archive/`, no duplicate scenarios between this change's delta and the `kube-driver` source-of-truth spec, composition report clean
+- [x] 7.5 Resolve or explicitly carry forward design Open Questions 1 (aggregation and the meaning of `evidence.EgressViolations`) and 2 (whether an incomplete record should refuse evidence rather than annotate it)
