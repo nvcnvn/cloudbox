@@ -14,6 +14,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
@@ -49,6 +50,35 @@ func (c *Cluster) deployEgressProxy(namespace string) {
 						VolumeMounts: []corev1.VolumeMount{{
 							Name: "allowlist", MountPath: "/etc/cloudbox",
 						}},
+						// A restart costs records and marks the sandbox's
+						// egress record incomplete, so the proxy gets what it
+						// needs not to be evicted or OOM-killed in the
+						// ordinary course of a run: a request the scheduler
+						// must honour, a limit its bounded record stays far
+						// inside, and a readiness gate so a replacement is not
+						// treated as serving before it can answer.
+						Resources: corev1.ResourceRequirements{
+							Requests: corev1.ResourceList{
+								corev1.ResourceCPU:    resource.MustParse("25m"),
+								corev1.ResourceMemory: resource.MustParse("32Mi"),
+							},
+							Limits: corev1.ResourceList{
+								corev1.ResourceCPU:    resource.MustParse("200m"),
+								corev1.ResourceMemory: resource.MustParse("64Mi"),
+							},
+						},
+						ReadinessProbe: &corev1.Probe{
+							ProbeHandler: corev1.ProbeHandler{
+								HTTPGet: &corev1.HTTPGetAction{
+									Path: "/healthz",
+									Port: intstr.FromInt32(proxyAdminPort),
+								},
+							},
+							InitialDelaySeconds: 1,
+							PeriodSeconds:       5,
+							TimeoutSeconds:      2,
+							FailureThreshold:    3,
+						},
 					}},
 					Volumes: []corev1.Volume{{
 						Name: "allowlist",
@@ -99,11 +129,12 @@ type proxyAttempt struct {
 	Allowed     bool        `json:"allowed"`
 }
 
-// proxyAttemptRecord is the /attempts response: the retained attempts plus
-// what the proxy's bound discarded.
+// proxyAttemptRecord is the /attempts response: the retained attempts, what
+// the proxy's bound discarded, and which proxy process answered.
 type proxyAttemptRecord struct {
-	Attempts []proxyAttempt `json:"attempts"`
-	Dropped  int            `json:"dropped"`
+	Attempts    []proxyAttempt `json:"attempts"`
+	Dropped     int            `json:"dropped"`
+	Incarnation string         `json:"incarnation"`
 }
 
 // decodeAttemptRecord accepts both shapes the admin surface can serve. A
@@ -173,9 +204,10 @@ func (c *Cluster) EgressAttempts(namespace string) cluster.EgressReport {
 		})
 	}
 	return cluster.EgressReport{
-		Attempts:  attempts,
-		Dropped:   record.Dropped,
-		Collected: true,
+		Attempts:    attempts,
+		Dropped:     record.Dropped,
+		Incarnation: record.Incarnation,
+		Collected:   true,
 	}
 }
 

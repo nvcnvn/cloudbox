@@ -17,6 +17,8 @@ package main
 
 import (
 	"bufio"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"flag"
 	"io"
@@ -47,12 +49,13 @@ type attempt struct {
 	Allowed     bool      `json:"allowed"`
 }
 
-// attemptRecord is what /attempts serves: the attempts still retained plus
-// how many the retention bound discarded, so a truncated record is never
-// presented as a complete one.
+// attemptRecord is what /attempts serves: the attempts still retained, how
+// many the retention bound discarded, and which process is answering, so
+// neither a truncated record nor a restarted one is presented as complete.
 type attemptRecord struct {
-	Attempts []attempt `json:"attempts"`
-	Dropped  int       `json:"dropped"`
+	Attempts    []attempt `json:"attempts"`
+	Dropped     int       `json:"dropped"`
+	Incarnation string    `json:"incarnation"`
 }
 
 type proxy struct {
@@ -61,7 +64,24 @@ type proxy struct {
 	dropped     int // monotonic: attempts the bound discarded, never reset
 	maxRetained int
 
+	// incarnation identifies this process. The record lives in memory, so a
+	// restart loses whatever was not collected; a stateless pod cannot prove
+	// it lost nothing, and this is what lets the control plane tell a restart
+	// from a quiet stretch instead of reading a short count as the truth.
+	incarnation string
+
 	allowlistPath string
+}
+
+// newIncarnation is generated once per process start.
+func newIncarnation() string {
+	buf := make([]byte, 16)
+	if _, err := rand.Read(buf); err != nil {
+		// Without a distinguishable identity the control plane cannot detect a
+		// restart, and would report a possibly-short record as complete.
+		log.Fatalf("cloudbox-proxy: generating the startup incarnation: %v", err)
+	}
+	return hex.EncodeToString(buf)
 }
 
 func (p *proxy) allowed(host string) bool {
@@ -171,7 +191,9 @@ func (p *proxy) serveAttempts(w http.ResponseWriter, _ *http.Request) {
 		retained = []attempt{}
 	}
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(attemptRecord{Attempts: retained, Dropped: p.dropped})
+	_ = json.NewEncoder(w).Encode(attemptRecord{
+		Attempts: retained, Dropped: p.dropped, Incarnation: p.incarnation,
+	})
 }
 
 func main() {
@@ -182,7 +204,11 @@ func main() {
 		"how many attempts to retain; beyond this the oldest are discarded and counted")
 	flag.Parse()
 
-	p := &proxy{allowlistPath: *allowlist, maxRetained: *maxRetained}
+	p := &proxy{
+		allowlistPath: *allowlist,
+		maxRetained:   *maxRetained,
+		incarnation:   newIncarnation(),
+	}
 
 	admin := http.NewServeMux()
 	admin.HandleFunc("GET /attempts", p.serveAttempts)
@@ -191,6 +217,7 @@ func main() {
 	})
 	go func() { log.Fatal(http.ListenAndServe(*adminAddr, admin)) }()
 
-	log.Printf("cloudbox-proxy listening on %s (admin %s)", *proxyAddr, *adminAddr)
+	log.Printf("cloudbox-proxy listening on %s (admin %s), incarnation %s, retaining %d attempts",
+		*proxyAddr, *adminAddr, p.incarnation, p.maxRetained)
 	log.Fatal(http.ListenAndServe(*proxyAddr, p))
 }
