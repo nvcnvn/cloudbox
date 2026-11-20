@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"cloudbox/internal/cluster"
+	"cloudbox/internal/intake"
+	"cloudbox/internal/refusal"
 )
 
 // Bundle is a recorded, content-addressed manifest set.
@@ -53,21 +55,21 @@ func (c *Core) Apply(appName, sandboxName, actor, manifestYAML string, opts Appl
 
 	app, ok := c.apps[appName]
 	if !ok {
-		return nil, errf(404, "application %q is not known", appName)
+		return nil, notFound("application", "application %q is not known", appName)
 	}
 	sb, ok := c.sandboxes[sandboxName]
 	if !ok {
-		return nil, errf(404, "sandbox %q is not known", sandboxName)
+		return nil, notFound("sandbox", "sandbox %q is not known", sandboxName)
 	}
 	if sb.Owner != actor {
-		return nil, errf(403, "sandbox %q is owned by %s: only the owner may modify it (S1)", sandboxName, sb.Owner)
+		return nil, refuse(403, refusal.NotOwner, "sandbox %q is owned by %s: only the owner may modify it (S1)", sandboxName, sb.Owner)
 	}
 	if sb.State == "destroyed" {
-		return nil, errf(409, "sandbox %q has been destroyed", sandboxName)
+		return nil, refuse(409, refusal.WrongState, "sandbox %q has been destroyed", sandboxName)
 	}
 	if !sb.Sealed {
 		// N1: a sandbox is sealed before any user workload is admitted.
-		return nil, errf(409,
+		return nil, refuse(409, refusal.NotSealed,
 			"sandbox %q is not sealed: no workload is admitted until default-deny ingress and egress are active (N1)",
 			sandboxName)
 	}
@@ -106,7 +108,7 @@ func (c *Core) Apply(appName, sandboxName, actor, manifestYAML string, opts Appl
 		mode = "squeezed"
 	}
 	if mode != "squeezed" && mode != "minimal" && mode != "full" {
-		return nil, errf(422, "unknown capacity mode %q (squeezed|minimal|full)", mode)
+		return nil, refuse(422, refusal.InvalidRequest, "unknown capacity mode %q (squeezed|minimal|full)", mode)
 	}
 	switch mode {
 	case "squeezed":
@@ -122,7 +124,7 @@ func (c *Core) Apply(appName, sandboxName, actor, manifestYAML string, opts Appl
 	}
 
 	if blockers := analysis.Blockers(); len(blockers) > 0 {
-		return nil, &Error{Status: 422, Message: blockers[0].Message, Findings: analysis.Findings}
+		return nil, &Error{Status: 422, Reason: intake.Rejected, Message: blockers[0].Message, Findings: analysis.Findings}
 	}
 
 	// Build admitted manifests and meter the quota AFTER the transform (S5).
@@ -150,7 +152,7 @@ func (c *Core) Apply(appName, sandboxName, actor, manifestYAML string, opts Appl
 		totalCores += totalCPUCores(manifest)
 	}
 	if quota := app.Policies.CPUQuotaPerSandbox; quota > 0 && totalCores > quota {
-		return nil, errf(422,
+		return nil, refuse(422, refusal.QuotaExceeded,
 			"apply exceeds the application quota of %g CPUs per sandbox: bundle requests %g CPUs after the %s transform",
 			quota, totalCores, mode)
 	}
@@ -295,7 +297,7 @@ func (c *Core) GetBundle(digest string) (*Bundle, error) {
 	defer c.mu.Unlock()
 	b, ok := c.bundles[digest]
 	if !ok {
-		return nil, errf(404, "no bundle recorded for digest %s", digest)
+		return nil, notFound("bundle", "no bundle recorded for digest %s", digest)
 	}
 	return b, nil
 }

@@ -2,7 +2,11 @@
 // and drives PR-bound sandboxes. One branch = one sandbox.
 package core
 
-import "fmt"
+import (
+	"fmt"
+
+	"cloudbox/internal/refusal"
+)
 
 // SCMEvent is one webhook delivery from the SCM integration.
 type SCMEvent struct {
@@ -30,10 +34,10 @@ func (c *Core) HandleSCMEvent(ev SCMEvent) (*Sandbox, error) {
 	defer c.mu.Unlock()
 	app, ok := c.apps[ev.App]
 	if !ok {
-		return nil, errf(404, "application %q is not known", ev.App)
+		return nil, notFound("application", "application %q is not known", ev.App)
 	}
 	if !app.SCMIntegration {
-		return nil, errf(409, "application %q has no SCM integration enabled", ev.App)
+		return nil, refuse(409, refusal.PrerequisiteMissing, "application %q has no SCM integration enabled", ev.App)
 	}
 
 	switch ev.Type {
@@ -69,7 +73,7 @@ func (c *Core) HandleSCMEvent(ev SCMEvent) (*Sandbox, error) {
 	case "closed", "merged":
 		sb := c.prSandbox(ev.App, ev.PR)
 		if sb == nil {
-			return nil, errf(404, "no sandbox bound to PR %s", ev.PR)
+			return nil, notFound("pr-binding", "no sandbox bound to PR %s", ev.PR)
 		}
 		if ev.Type == "merged" && ev.Manifests != "" {
 			// G7: re-render the merge result and bind evidence by digest
@@ -88,5 +92,5 @@ func (c *Core) HandleSCMEvent(ev SCMEvent) (*Sandbox, error) {
 		c.destroyLocked(sb)
 		return sb, nil
 	}
-	return nil, errf(422, "unknown SCM event type %q", ev.Type)
+	return nil, refuse(422, refusal.InvalidRequest, "unknown SCM event type %q", ev.Type)
 }

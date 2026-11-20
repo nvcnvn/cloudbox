@@ -3,7 +3,11 @@
 // resulting divergence invalidates evidence until a reconciling promotion.
 package core
 
-import "time"
+import (
+	"time"
+
+	"cloudbox/internal/refusal"
+)
 
 const breakGlassTTL = time.Hour
 
@@ -21,7 +25,7 @@ func (c *Core) GrantBreakGlass(appName, actor string) (*BreakGlassGrant, error) 
 	defer c.mu.Unlock()
 	app, ok := c.apps[appName]
 	if !ok {
-		return nil, errf(404, "application %q is not known", appName)
+		return nil, notFound("application", "application %q is not known", appName)
 	}
 	named := false
 	for _, role := range app.BreakGlassRole {
@@ -30,7 +34,7 @@ func (c *Core) GrantBreakGlass(appName, actor string) (*BreakGlassGrant, error) 
 		}
 	}
 	if !named {
-		return nil, errf(403, "%s is not in the application's configured break-glass role", actor)
+		return nil, refuse(403, refusal.NotPermitted, "%s is not in the application's configured break-glass role", actor)
 	}
 	if c.breakGlass[appName] == nil {
 		c.breakGlass[appName] = map[string]time.Time{}
@@ -52,7 +56,7 @@ func (c *Core) ProductionStatus(appName string) (map[string]any, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if _, ok := c.apps[appName]; !ok {
-		return nil, errf(404, "application %q is not known", appName)
+		return nil, notFound("application", "application %q is not known", appName)
 	}
 	out := map[string]any{"promoted": c.promoted[appName]}
 	if live := c.production[appName]; live != nil {
@@ -68,7 +72,7 @@ func (c *Core) CredentialsReport(appName string) (map[string]any, error) {
 	defer c.mu.Unlock()
 	app, ok := c.apps[appName]
 	if !ok {
-		return nil, errf(404, "application %q is not known", appName)
+		return nil, notFound("application", "application %q is not known", appName)
 	}
 	return map[string]any{
 		"level":                      app.Level,

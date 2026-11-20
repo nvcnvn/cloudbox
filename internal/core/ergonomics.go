@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"cloudbox/internal/cluster"
+	"cloudbox/internal/refusal"
 )
 
 // ownedWorkload resolves a workload in a sandbox the actor owns. Callers hold
@@ -14,14 +15,14 @@ import (
 func (c *Core) ownedWorkload(sandboxName, workload, actor string) (*Sandbox, *cluster.Workload, error) {
 	sb, ok := c.sandboxes[sandboxName]
 	if !ok {
-		return nil, nil, errf(404, "sandbox %q is not known", sandboxName)
+		return nil, nil, notFound("sandbox", "sandbox %q is not known", sandboxName)
 	}
 	if sb.Owner != actor {
-		return nil, nil, errf(403, "sandbox %q is owned by %s: only the owner may modify it (S1)", sandboxName, sb.Owner)
+		return nil, nil, refuse(403, refusal.NotOwner, "sandbox %q is owned by %s: only the owner may modify it (S1)", sandboxName, sb.Owner)
 	}
 	host, ok := c.driver.Cluster(sb.Cluster)
 	if !ok {
-		return nil, nil, errf(404, "cluster %q is not known", sb.Cluster)
+		return nil, nil, notFound("cluster", "cluster %q is not known", sb.Cluster)
 	}
 	for _, w := range host.Workloads(sb.Namespace) {
 		if w.Name == workload {
@@ -29,7 +30,7 @@ func (c *Core) ownedWorkload(sandboxName, workload, actor string) (*Sandbox, *cl
 			return sb, &found, nil
 		}
 	}
-	return nil, nil, errf(404, "workload %q is not running in sandbox %q", workload, sandboxName)
+	return nil, nil, notFound("workload", "workload %q is not running in sandbox %q", workload, sandboxName)
 }
 
 // Logs streams a sealed workload's logs to its owner, audited (X1).
@@ -104,7 +105,7 @@ func (c *Core) Explain(sandboxName string) (*Explanation, error) {
 	defer c.mu.Unlock()
 	sb, ok := c.sandboxes[sandboxName]
 	if !ok {
-		return nil, errf(404, "sandbox %q is not known", sandboxName)
+		return nil, notFound("sandbox", "sandbox %q is not known", sandboxName)
 	}
 	c.refreshBlockedEgressLocked(sb)
 	out := &Explanation{

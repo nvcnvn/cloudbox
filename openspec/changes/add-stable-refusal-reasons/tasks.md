@@ -20,10 +20,10 @@ Standing constraints:
 
 ## 1. Foundations
 
-- [ ] 1.1 Add `internal/refusal`: `type Reason string`, the 20 constants from design D1, and `Catalog()` returning code and one-line summary in a stable order; the package imports nothing from the module
-- [ ] 1.2 `core.Error` gains `Reason` and `Subject`; replace `errf` with `refuse(status, reason, …)` and `notFound(subject, …)`, then delete `errf` so the build fails at every unconverted site
-- [ ] 1.3 Convert every call site in `internal/core` per design D1's mapping rule, file by file (including the intake `&Error{}` in `bundles.go` → `bundle-rejected`); `go build ./...` and `go vet ./...` clean; the default acceptance run (`make acceptance`) stays green with no status or message change
-- [ ] 1.4 `internal/server`: `writeErr` emits `reason` and `subject`; non-`core.Error` → `internal-error`; give the direct `writeJSON` error paths explicit reasons (design D3)
+- [x] 1.1 Add `internal/refusal`: `type Reason string`, the 20 constants from design D1, and `Catalog()` returning code and one-line summary in a stable order; the package imports nothing from the module
+- [x] 1.2 `core.Error` gains `Reason` and `Subject`; replace `errf` with `refuse(status, reason, …)` and `notFound(subject, …)`, then delete `errf` so the build fails at every unconverted site
+- [x] 1.3 Convert every call site in `internal/core` per design D1's mapping rule, file by file (including the intake `&Error{}` in `bundles.go` → `bundle-rejected`); `go build ./...` and `go vet ./...` clean; the default acceptance run (`make acceptance`) stays green with no status or message change
+- [x] 1.4 `internal/server`: `writeErr` emits `reason` and `subject`; non-`core.Error` → `internal-error`; give the direct `writeJSON` error paths explicit reasons (design D3)
 
 ## 2. Developer ergonomics — red → green → commit per rule
 

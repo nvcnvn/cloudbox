@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	"cloudbox/internal/refusal"
 )
 
 // WitnessedActivity is what actually executed under the seal, attributed by
@@ -292,10 +294,10 @@ func (c *Core) GetEvidence(sandboxName string) (*Evidence, error) {
 	defer c.mu.Unlock()
 	sb, ok := c.sandboxes[sandboxName]
 	if !ok {
-		return nil, errf(404, "sandbox %q is not known", sandboxName)
+		return nil, notFound("sandbox", "sandbox %q is not known", sandboxName)
 	}
 	if sb.State == "unsealed-cluster-not-enforcing" {
-		return nil, errf(409,
+		return nil, refuse(409, refusal.EnforcementUnproven,
 			"sandbox %q produces no evidence: the cluster's CNI did not pass the seal enforcement probe (N7)",
 			sandboxName)
 	}
@@ -314,10 +316,10 @@ func (c *Core) RequireManagedSandbox(sandboxName, action string) error {
 func (c *Core) requireManagedLocked(sandboxName, action string) error {
 	sb, ok := c.sandboxes[sandboxName]
 	if !ok {
-		return errf(404, "sandbox %q is not known", sandboxName)
+		return notFound("sandbox", "sandbox %q is not known", sandboxName)
 	}
 	if sb.UserControlled {
-		return errf(403,
+		return refuse(403, refusal.EvidenceNotPostable,
 			"cannot %s: sandbox %q runs on a user-controlled cluster, so its evidence is not from a control-plane-managed sandbox and is non-postable and non-promotable (ADR 0004)",
 			action, sandboxName)
 	}
@@ -331,7 +333,7 @@ func (c *Core) OverrideSubstrateMismatch(sandboxName, admin, reason string) erro
 	defer c.mu.Unlock()
 	sb, ok := c.sandboxes[sandboxName]
 	if !ok {
-		return errf(404, "sandbox %q is not known", sandboxName)
+		return notFound("sandbox", "sandbox %q is not known", sandboxName)
 	}
 	ev := c.evidenceFor(sb)
 	ev.substrateOverridden = true

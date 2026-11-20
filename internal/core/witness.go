@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"cloudbox/internal/cluster"
+	"cloudbox/internal/refusal"
 )
 
 // TestRun is one witnessed, control-plane-attributed suite execution.
@@ -27,14 +28,14 @@ func (c *Core) RunTests(sandboxName, suite, actor string) (*TestRun, error) {
 	defer c.mu.Unlock()
 	sb, ok := c.sandboxes[sandboxName]
 	if !ok {
-		return nil, errf(404, "sandbox %q is not known", sandboxName)
+		return nil, notFound("sandbox", "sandbox %q is not known", sandboxName)
 	}
 	if !sb.Sealed {
-		return nil, errf(409, "sandbox %q is not sealed: witnessed runs happen only under the seal", sandboxName)
+		return nil, refuse(409, refusal.NotSealed, "sandbox %q is not sealed: witnessed runs happen only under the seal", sandboxName)
 	}
 	app := c.apps[sb.App]
 	if app == nil || app.TestSuite == nil {
-		return nil, errf(409, "application %q declares no test suite", sb.App)
+		return nil, refuse(409, refusal.PrerequisiteMissing, "application %q declares no test suite", sb.App)
 	}
 	if suite == "" {
 		suite = app.TestSuite.Name
@@ -60,7 +61,7 @@ func (c *Core) RunTests(sandboxName, suite, actor string) (*TestRun, error) {
 // AssertTestResults is what a CI pipeline tries when it wants to report its
 // own outcome. It is always refused: pipelines trigger, never assert (CP4).
 func (c *Core) AssertTestResults(sandboxName string) error {
-	return errf(403,
+	return refuse(403, refusal.UnwitnessedResults,
 		"test results reported by a pipeline are not accepted as witnessed activity: evidence is gathered and signed only by the control plane (CP4); trigger the test command instead")
 }
 

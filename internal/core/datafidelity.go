@@ -11,6 +11,8 @@ import (
 	"sort"
 	"strings"
 	"unicode"
+
+	"cloudbox/internal/refusal"
 )
 
 // DeclaredDatastore is one datastore an application declares (D1).
@@ -53,7 +55,7 @@ func (c *Core) SeedDatabase(appName, datastore string, db SimDatabase) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if _, ok := c.apps[appName]; !ok {
-		return errf(404, "application %q is not known", appName)
+		return notFound("application", "application %q is not known", appName)
 	}
 	c.databases[dsKey(appName, datastore)] = &db
 	return nil
@@ -70,7 +72,7 @@ func (c *Core) ProfileDatastore(appName, datastore string) (*DataProfile, error)
 func (c *Core) profileLocked(appName, datastore string) (*DataProfile, error) {
 	app, ok := c.apps[appName]
 	if !ok {
-		return nil, errf(404, "application %q is not known", appName)
+		return nil, notFound("application", "application %q is not known", appName)
 	}
 	declared := false
 	for _, ds := range app.Datastores {
@@ -79,11 +81,11 @@ func (c *Core) profileLocked(appName, datastore string) (*DataProfile, error) {
 		}
 	}
 	if !declared {
-		return nil, errf(404, "datastore %q is not declared by application %q", datastore, appName)
+		return nil, notFound("datastore", "datastore %q is not declared by application %q", datastore, appName)
 	}
 	db, ok := c.databases[dsKey(appName, datastore)]
 	if !ok {
-		return nil, errf(409, "no production database reachable for %q", datastore)
+		return nil, refuse(409, refusal.PrerequisiteMissing, "no production database reachable for %q", datastore)
 	}
 
 	schemaBlob, _ := json.Marshal(db.Schema)
@@ -159,7 +161,7 @@ func (c *Core) EnableRealData(appName, admin string, forAgents bool) error {
 	defer c.mu.Unlock()
 	app, ok := c.apps[appName]
 	if !ok {
-		return errf(404, "application %q is not known", appName)
+		return notFound("application", "application %q is not known", appName)
 	}
 	app.RealDataEnabled = true
 	app.RealDataForAgents = forAgents
@@ -175,21 +177,21 @@ func (c *Core) ProvisionDatastore(sandboxName, datastore, level string) (map[str
 	defer c.mu.Unlock()
 	sb, ok := c.sandboxes[sandboxName]
 	if !ok {
-		return nil, errf(404, "sandbox %q is not known", sandboxName)
+		return nil, notFound("sandbox", "sandbox %q is not known", sandboxName)
 	}
 	if _, ok := fidelityRank[level]; !ok {
-		return nil, errf(422, "unknown fidelity level %q", level)
+		return nil, refuse(422, refusal.InvalidRequest, "unknown fidelity level %q", level)
 	}
 	app := c.apps[sb.App]
 
 	if fidelityRank[level] >= fidelityRank["masked-snapshot"] {
 		if app == nil || !app.RealDataEnabled {
-			return nil, errf(403,
+			return nil, refuse(403, refusal.NotPermitted,
 				"real-data levels are not enabled for application %q: masked-snapshot and live-clone are admin-enabled per application, never default (D8)",
 				sb.App)
 		}
 		if sb.AgentOwned && !app.RealDataForAgents {
-			return nil, errf(403,
+			return nil, refuse(403, refusal.NotPermitted,
 				"sandbox %q is agent-owned: real-data levels are unavailable to agent-owned sandboxes pending explicit policy (D8)",
 				sandboxName)
 		}
@@ -207,7 +209,7 @@ func (c *Core) ProvisionDatastore(sandboxName, datastore, level string) (map[str
 			}
 		}
 		if declared == nil || !declared.Branching {
-			return nil, errf(409, "datastore %q has no branching-capable service: live-clone is a thin-clone integration (D7)", datastore)
+			return nil, refuse(409, refusal.PrerequisiteMissing, "datastore %q has no branching-capable service: live-clone is a thin-clone integration (D7)", datastore)
 		}
 		// D7: the branch endpoint enters the sandbox through the boundary
 		// contract — a per-sandbox secret plus an allowlist entry.

@@ -6,6 +6,8 @@ package core
 import (
 	"fmt"
 	"time"
+
+	"cloudbox/internal/refusal"
 )
 
 // MergeResult is the G7 binding decision for one merged PR.
@@ -68,7 +70,7 @@ func (c *Core) MergeResultFor(app, pr string) (*MergeResult, error) {
 	defer c.mu.Unlock()
 	result, ok := c.mergeResults[prKey(app, pr)]
 	if !ok {
-		return nil, errf(404, "no merge result recorded for %s PR %s", app, pr)
+		return nil, notFound("merge-result", "no merge result recorded for %s PR %s", app, pr)
 	}
 	return result, nil
 }
@@ -117,7 +119,7 @@ func (c *Core) PostEvidenceCheck(sandboxName, pr string) (*PRCheck, error) {
 	sb := c.sandboxes[sandboxName]
 	app := c.apps[sb.App]
 	if sb.State == "unsealed-cluster-not-enforcing" {
-		return nil, errf(409, "sandbox %q produces no evidence (N7)", sandboxName)
+		return nil, refuse(409, refusal.EnforcementUnproven, "sandbox %q produces no evidence (N7)", sandboxName)
 	}
 	ev := c.snapshotEvidence(sb)
 

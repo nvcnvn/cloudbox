@@ -7,6 +7,8 @@ package core
 import (
 	"fmt"
 	"time"
+
+	"cloudbox/internal/refusal"
 )
 
 // Promotion is one approval-gated request to apply a bundle to production.
@@ -44,7 +46,7 @@ type PromotedState struct {
 // the transition MUST NOT proceed (G5). Callers hold c.mu.
 func (c *Core) auditOrFail(actor, action, subject, detail string) error {
 	if !c.auditAvailable {
-		return errf(503,
+		return refuse(503, refusal.AuditUnavailable,
 			"audit sink unavailable: the %s transition does not proceed until the audit record can be written (G5)", action)
 	}
 	c.recordAudit(actor, action, subject, detail)
@@ -91,14 +93,14 @@ func (c *Core) OpenPromotion(sandboxName, actor string) (*Promotion, error) {
 	app := c.apps[sb.App]
 	ev := c.snapshotEvidence(sb)
 	if !ev.Valid {
-		return nil, errf(409, "promotion blocked: evidence is not valid (%v)", ev.InvalidReasons)
+		return nil, refuse(409, refusal.PromotionBlocked, "promotion blocked: evidence is not valid (%v)", ev.InvalidReasons)
 	}
 	// Valid evidence may still carry unverified parity (it invalidates only on
 	// mismatch, and an admin may override a mismatch); promoting on a
 	// comparison that never happened would read
 	// unverified as a match (substrate-parity, design D4).
 	if ev.SubstrateParity == ParityUnverified {
-		return nil, errf(409,
+		return nil, refuse(409, refusal.PromotionBlocked,
 			"promotion blocked: substrate parity is %s — no production substrate has been compared", ev.SubstrateParity)
 	}
 	snapshot := *ev
@@ -113,11 +115,11 @@ func (c *Core) Approve(promotionID, actor string) (*Promotion, error) {
 	defer c.mu.Unlock()
 	p, ok := c.promotions[promotionID]
 	if !ok {
-		return nil, errf(404, "promotion %q is not known", promotionID)
+		return nil, notFound("promotion", "promotion %q is not known", promotionID)
 	}
 	app := c.apps[p.App]
 	if p.OpenedBy == actor {
-		return nil, errf(403, "self-approval rejected: %s opened this promotion and cannot approve it (G4)", actor)
+		return nil, refuse(403, refusal.NotPermitted, "self-approval rejected: %s opened this promotion and cannot approve it (G4)", actor)
 	}
 	allowed := false
 	for _, approver := range app.Approvers {
@@ -126,11 +128,11 @@ func (c *Core) Approve(promotionID, actor string) (*Promotion, error) {
 		}
 	}
 	if !allowed {
-		return nil, errf(403, "%s is not in the application's declared approver roles (G4)", actor)
+		return nil, refuse(403, refusal.NotPermitted, "%s is not in the application's declared approver roles (G4)", actor)
 	}
 	for _, existing := range p.Approvals {
 		if existing == actor {
-			return nil, errf(409, "%s has already approved", actor)
+			return nil, refuse(409, refusal.WrongState, "%s has already approved", actor)
 		}
 	}
 	if err := c.auditOrFail(actor, "promotion-approval-recorded", p.ID, ""); err != nil {
@@ -159,14 +161,14 @@ func (c *Core) ExecuteApply(promotionID, actor string) (*Promotion, error) {
 	defer c.mu.Unlock()
 	p, ok := c.promotions[promotionID]
 	if !ok {
-		return nil, errf(404, "promotion %q is not known", promotionID)
+		return nil, notFound("promotion", "promotion %q is not known", promotionID)
 	}
 	if p.State != "approved" {
-		return nil, errf(409, "promotion %q is %s, not approved", promotionID, p.State)
+		return nil, refuse(409, refusal.WrongState, "promotion %q is %s, not approved", promotionID, p.State)
 	}
 	bundle, ok := c.bundles[p.Digest]
 	if !ok {
-		return nil, errf(404, "no bundle recorded for digest %s", p.Digest)
+		return nil, notFound("bundle", "no bundle recorded for digest %s", p.Digest)
 	}
 
 	switch p.Mode {
@@ -191,7 +193,7 @@ func (c *Core) ExecuteApply(promotionID, actor string) (*Promotion, error) {
 		c.setProductionObjectsLocked(p.App, bundle.ManifestYAML)
 		return c.verifyPromotionLocked(p)
 	}
-	return nil, errf(500, "unknown promotion mode %q", p.Mode)
+	return nil, refuse(500, refusal.InternalError, "unknown promotion mode %q", p.Mode)
 }
 
 type gitopsCommit struct {
@@ -207,7 +209,7 @@ func (c *Core) GitOpsSync(appName string) (*Promotion, error) {
 	defer c.mu.Unlock()
 	commit, ok := c.gitops[appName]
 	if !ok {
-		return nil, errf(404, "nothing committed to the GitOps path for %q", appName)
+		return nil, notFound("gitops-commit", "nothing committed to the GitOps path for %q", appName)
 	}
 	manifests := commit.Manifests
 	if c.failNextSync[appName] {
@@ -224,7 +226,7 @@ func (c *Core) GitOpsSync(appName string) (*Promotion, error) {
 		}
 	}
 	if p == nil {
-		return nil, errf(404, "no committed promotion awaiting verification for %q", appName)
+		return nil, refuse(404, refusal.WrongState, "no committed promotion awaiting verification for %q", appName)
 	}
 	return c.verifyPromotionLocked(p)
 }
@@ -287,7 +289,7 @@ func (c *Core) OpenRollback(appName, digest, actor string) (*Promotion, error) {
 	defer c.mu.Unlock()
 	app, ok := c.apps[appName]
 	if !ok {
-		return nil, errf(404, "application %q is not known", appName)
+		return nil, notFound("application", "application %q is not known", appName)
 	}
 	for _, entry := range c.history[appName] {
 		if entry.Digest == digest {
@@ -299,7 +301,7 @@ func (c *Core) OpenRollback(appName, digest, actor string) (*Promotion, error) {
 			return c.openPromotionLocked(app, "", digest, actor, entry.Evidence, &snapshot)
 		}
 	}
-	return nil, errf(404, "digest %s was never applied to production for %q", digest, appName)
+	return nil, notFound("production-apply", "digest %s was never applied to production for %q", digest, appName)
 }
 
 // ListPromotions lists promotions, optionally filtered by application.
@@ -321,7 +323,7 @@ func (c *Core) GetPromotion(id string) (*Promotion, error) {
 	defer c.mu.Unlock()
 	p, ok := c.promotions[id]
 	if !ok {
-		return nil, errf(404, "promotion %q is not known", id)
+		return nil, notFound("promotion", "promotion %q is not known", id)
 	}
 	return p, nil
 }

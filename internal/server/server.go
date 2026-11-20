@@ -11,6 +11,7 @@ import (
 
 	"cloudbox/internal/cluster"
 	"cloudbox/internal/core"
+	"cloudbox/internal/refusal"
 	"cloudbox/internal/sim"
 )
 
@@ -170,20 +171,28 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 func writeErr(w http.ResponseWriter, err error) {
 	var ce *core.Error
 	if errors.As(err, &ce) {
-		body := map[string]any{"error": ce.Message}
+		body := map[string]any{"error": ce.Message, "reason": ce.Reason}
+		if ce.Subject != "" {
+			body["subject"] = ce.Subject
+		}
 		if len(ce.Findings) > 0 {
 			body["findings"] = ce.Findings
 		}
 		writeJSON(w, ce.Status, body)
 		return
 	}
-	writeJSON(w, 500, map[string]string{"error": err.Error()})
+	writeJSON(w, 500, map[string]any{"error": err.Error(), "reason": refusal.InternalError})
+}
+
+// refuse writes a refusal the server itself decides, before reaching core.
+func refuse(w http.ResponseWriter, status int, reason refusal.Reason, subject, message string) {
+	writeErr(w, &core.Error{Status: status, Reason: reason, Subject: subject, Message: message})
 }
 
 func decode[T any](w http.ResponseWriter, r *http.Request) (T, bool) {
 	var v T
 	if err := json.NewDecoder(r.Body).Decode(&v); err != nil {
-		writeJSON(w, 400, map[string]string{"error": "invalid JSON: " + err.Error()})
+		refuse(w, 400, refusal.InvalidRequest, "", "invalid JSON: "+err.Error())
 		return v, false
 	}
 	return v, true
@@ -220,7 +229,7 @@ func (s *Server) simCreateCluster(w http.ResponseWriter, r *http.Request) {
 func (s *Server) simApplyRaw(w http.ResponseWriter, r *http.Request) {
 	cl, ok := s.world.Cluster(r.PathValue("cluster"))
 	if !ok {
-		writeJSON(w, 404, map[string]string{"error": "cluster not known"})
+		refuse(w, 404, refusal.NotFound, "cluster", "cluster not known")
 		return
 	}
 	obj, decoded := decode[struct {
@@ -237,13 +246,13 @@ func (s *Server) simApplyRaw(w http.ResponseWriter, r *http.Request) {
 func (s *Server) simGetRaw(w http.ResponseWriter, r *http.Request) {
 	cl, ok := s.world.Cluster(r.PathValue("cluster"))
 	if !ok {
-		writeJSON(w, 404, map[string]string{"error": "cluster not known"})
+		refuse(w, 404, refusal.NotFound, "cluster", "cluster not known")
 		return
 	}
 	q := r.URL.Query()
 	found, ok := cl.GetRaw(q.Get("namespace"), q.Get("kind"), q.Get("name"))
 	if !ok {
-		writeJSON(w, 404, map[string]string{"error": "object not found"})
+		refuse(w, 404, refusal.NotFound, "object", "object not found")
 		return
 	}
 	writeJSON(w, 200, found)
@@ -252,7 +261,7 @@ func (s *Server) simGetRaw(w http.ResponseWriter, r *http.Request) {
 func (s *Server) simSetComponents(w http.ResponseWriter, r *http.Request) {
 	cl, ok := s.world.Cluster(r.PathValue("cluster"))
 	if !ok {
-		writeJSON(w, 404, map[string]string{"error": "cluster not known"})
+		refuse(w, 404, refusal.NotFound, "cluster", "cluster not known")
 		return
 	}
 	req, decoded := decode[struct {
@@ -387,9 +396,9 @@ func (s *Server) updateContract(w http.ResponseWriter, r *http.Request) {
 	dec.DisallowUnknownFields()
 	var contract core.Contract
 	if err := dec.Decode(&contract); err != nil {
-		writeJSON(w, 422, map[string]string{"error": fmt.Sprintf(
+		refuse(w, 422, refusal.OutOfContract, "", fmt.Sprintf(
 			"contract rejected (%v): environment variance is limited to secret names, ingress hostnames, the egress allowlist, and internal application dependencies — anything else is out of contract by design; the path is a change to the product spec, not an overlay or templating mechanism",
-			err)})
+			err))
 		return
 	}
 	if err := s.core.UpdateContract(r.PathValue("app"), contract); err != nil {
@@ -451,7 +460,7 @@ func (s *Server) createSandbox(w http.ResponseWriter, r *http.Request) {
 	if req.Local {
 		// The removed local option is refused by name rather than ignored, so
 		// a caller never gets a sandbox somewhere it did not ask for.
-		writeJSON(w, 400, map[string]string{"error": "the local option was removed: the product does not create clusters; register a cluster you control as a sandbox host (userControlled) and create the sandbox there (ADR 0010)"})
+		refuse(w, 400, refusal.InvalidRequest, "", "the local option was removed: the product does not create clusters; register a cluster you control as a sandbox host (userControlled) and create the sandbox there (ADR 0010)")
 		return
 	}
 	sb, err := s.core.CreateSandbox(req.App, actor(r), core.CreateSandboxOptions{
@@ -933,7 +942,7 @@ func (s *Server) simSetEnforcement(w http.ResponseWriter, r *http.Request) {
 	cl, found := s.world.Cluster(r.PathValue("cluster"))
 	sc, isSim := cl.(*sim.SimCluster)
 	if !found || !isSim {
-		writeJSON(w, 404, map[string]string{"error": "cluster not known"})
+		refuse(w, 404, refusal.NotFound, "cluster", "cluster not known")
 		return
 	}
 	sc.SetEnforcing(req.Enforcing)
@@ -950,7 +959,7 @@ func (s *Server) simSetRegistry(w http.ResponseWriter, r *http.Request) {
 	cl, found := s.world.Cluster(r.PathValue("cluster"))
 	sc, isSim := cl.(*sim.SimCluster)
 	if !found || !isSim {
-		writeJSON(w, 404, map[string]string{"error": "cluster not known"})
+		refuse(w, 404, refusal.NotFound, "cluster", "cluster not known")
 		return
 	}
 	sc.SetRegistryReachable(req.Reachable)

@@ -8,6 +8,7 @@ import (
 	"sort"
 
 	"cloudbox/internal/cluster"
+	"cloudbox/internal/refusal"
 )
 
 // ProductionState is what the team's own CD has running for an application.
@@ -31,11 +32,11 @@ func (c *Core) SetProductionState(appName, actor, manifestYAML string) error {
 	}
 	app, ok := c.apps[appName]
 	if !ok {
-		return errf(404, "application %q is not known", appName)
+		return notFound("application", "application %q is not known", appName)
 	}
 	if app.Level == "L4" {
 		if !c.hasBreakGlassLocked(appName, actor) {
-			return errf(403,
+			return refuse(403, refusal.NotPermitted,
 				"write to managed production namespace %q denied by the product-managed RBAC: in strict mode production is writable only by the controller executing an approved promotion (G1); break-glass is the audited exception (G12)",
 				appName)
 		}
@@ -126,7 +127,7 @@ func (c *Core) DiffAgainstProduction(appName, digest string) ([]DiffLine, error)
 func (c *Core) diffLocked(appName, digest string) ([]DiffLine, error) {
 	bundle, ok := c.bundles[digest]
 	if !ok {
-		return nil, errf(404, "no bundle recorded for digest %s", digest)
+		return nil, notFound("bundle", "no bundle recorded for digest %s", digest)
 	}
 	prod, ok := c.production[appName]
 	if !ok {

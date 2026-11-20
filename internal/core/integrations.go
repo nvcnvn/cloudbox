@@ -1,5 +1,7 @@
 package core
 
+import "cloudbox/internal/refusal"
+
 // Integrations records which external systems this control plane is wired to
 // (ADR 0009). An operation that depends on an absent integration refuses,
 // names the integration, and records nothing — it never writes to a
@@ -41,7 +43,7 @@ func (c *Core) requireIntegration(present bool, name, operation string) error {
 	if present {
 		return nil
 	}
-	return errf(501,
+	return refuse(501, refusal.IntegrationMissing,
 		"cannot %s: no %s integration is configured for this control plane, so the request is refused and nothing was recorded",
 		operation, name)
 }

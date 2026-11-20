@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"cloudbox/internal/cluster"
+	"cloudbox/internal/refusal"
 )
 
 // APIGroup is the one API group all five product CRDs live under (CP1).
@@ -91,16 +92,27 @@ type Application struct {
 // Error is a user-facing failure with an HTTP-ish status. Intake rejections
 // carry the full finding list so every rejection names the violating manifest
 // and the fix (B3).
+//
+// Reason is the stable code a program branches on (ADR 0012); Subject names
+// the kind of thing a not-found refusal could not find.
 type Error struct {
 	Status   int
+	Reason   refusal.Reason
+	Subject  string
 	Message  string
 	Findings []Finding
 }
 
 func (e *Error) Error() string { return e.Message }
 
-func errf(status int, format string, args ...any) *Error {
-	return &Error{Status: status, Message: fmt.Sprintf(format, args...)}
+// refuse builds a refusal; the reason is required, so none can be omitted.
+func refuse(status int, reason refusal.Reason, format string, args ...any) *Error {
+	return &Error{Status: status, Reason: reason, Message: fmt.Sprintf(format, args...)}
+}
+
+// notFound refuses with 404 and names the kind of thing that was missing.
+func notFound(subject, format string, args ...any) *Error {
+	return &Error{Status: 404, Reason: refusal.NotFound, Subject: subject, Message: fmt.Sprintf(format, args...)}
 }
 
 // Core is the whole control plane behind the HTTP surface.
@@ -197,7 +209,7 @@ func (c *Core) RegisterCluster(name, role string, userControlled bool) error {
 	host, ok := c.driver.Cluster(name)
 	c.mu.Unlock()
 	if !ok {
-		return errf(404, "cluster %q is not known", name)
+		return notFound("cluster", "cluster %q is not known", name)
 	}
 	// A sandbox host must be shown to enforce NetworkPolicy before it is
 	// accepted (sandbox-lifecycle, design D2): the error belongs where the
@@ -205,7 +217,7 @@ func (c *Core) RegisterCluster(name, role string, userControlled bool) error {
 	// probe owns its scratch namespaces and runs without holding c.mu — on a
 	// real cluster it takes as long as two canary pods.
 	if role == "sandbox" && !host.ProbeEnforcement() {
-		return errf(422,
+		return refuse(422, refusal.EnforcementUnproven,
 			"cluster %q refused as a sandbox host: unproven network policy enforcement — the enforcement probe found a connection the seal must deny was not denied, so this cluster's CNI does not enforce NetworkPolicy; install a CNI that enforces it (for example Calico) and register again",
 			name)
 	}
@@ -249,7 +261,7 @@ func (c *Core) Setup(clusterName string) error {
 	defer c.mu.Unlock()
 	cl, ok := c.driver.Cluster(clusterName)
 	if !ok {
-		return errf(404, "cluster %q is not known", clusterName)
+		return notFound("cluster", "cluster %q is not known", clusterName)
 	}
 	cl.InstallCRDs(ProductCRDs())
 	c.installed[clusterName] = true
@@ -260,7 +272,7 @@ func (c *Core) Setup(clusterName string) error {
 func (c *Core) InstalledCRDs(clusterName string) ([]cluster.CRD, error) {
 	cl, ok := c.driver.Cluster(clusterName)
 	if !ok {
-		return nil, errf(404, "cluster %q is not known", clusterName)
+		return nil, notFound("cluster", "cluster %q is not known", clusterName)
 	}
 	return cl.ListCRDs(), nil
 }
@@ -272,14 +284,14 @@ func (c *Core) CreateApplication(app *Application) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if app.Name == "" {
-		return errf(422, "application name is required")
+		return refuse(422, refusal.InvalidRequest, "application name is required")
 	}
 	if _, exists := c.apps[app.Name]; exists {
-		return errf(409, "application %q already exists", app.Name)
+		return refuse(409, refusal.AlreadyExists, "application %q already exists", app.Name)
 	}
 	for _, dep := range app.Contract.Dependencies {
 		if _, ok := c.apps[dep.App]; !ok {
-			return errf(422,
+			return refuse(422, refusal.OutOfContract,
 				"dangling dependency reference: application %q declares a dependency on %q, which does not exist",
 				app.Name, dep.App)
 		}
@@ -290,7 +302,7 @@ func (c *Core) CreateApplication(app *Application) error {
 	if app.Level == "L4" && len(app.BreakGlassRole) == 0 {
 		// G12: an escape hatch that exists is auditable; one that doesn't
 		// gets improvised.
-		return errf(422,
+		return refuse(422, refusal.PrerequisiteMissing,
 			"setup failed: strict mode requires a configured break-glass role — name the emergency identities before enabling L4")
 	}
 	c.apps[app.Name] = app
@@ -303,7 +315,7 @@ func (c *Core) GetApplication(name string) (*Application, error) {
 	defer c.mu.Unlock()
 	app, ok := c.apps[name]
 	if !ok {
-		return nil, errf(404, "application %q is not known", name)
+		return nil, notFound("application", "application %q is not known", name)
 	}
 	return app, nil
 }
@@ -316,11 +328,11 @@ func (c *Core) UpdateContract(appName string, contract Contract) error {
 	defer c.mu.Unlock()
 	app, ok := c.apps[appName]
 	if !ok {
-		return errf(404, "application %q is not known", appName)
+		return notFound("application", "application %q is not known", appName)
 	}
 	for _, dep := range contract.Dependencies {
 		if _, ok := c.apps[dep.App]; !ok {
-			return errf(422,
+			return refuse(422, refusal.OutOfContract,
 				"dangling dependency reference: contract declares a dependency on %q, which does not exist",
 				dep.App)
 		}
@@ -337,7 +349,7 @@ func (c *Core) SetSecretValue(appName, environment, name string) error {
 	defer c.mu.Unlock()
 	app, ok := c.apps[appName]
 	if !ok {
-		return errf(404, "application %q is not known", appName)
+		return notFound("application", "application %q is not known", appName)
 	}
 	declared := false
 	for _, s := range app.Contract.SecretNames {
@@ -346,7 +358,7 @@ func (c *Core) SetSecretValue(appName, environment, name string) error {
 		}
 	}
 	if !declared {
-		return errf(422, "secret %q is not declared in the boundary contract", name)
+		return refuse(422, refusal.OutOfContract, "secret %q is not declared in the boundary contract", name)
 	}
 	if c.secretValues[appName] == nil {
 		c.secretValues[appName] = map[string]map[string]bool{}

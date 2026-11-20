@@ -3,7 +3,10 @@
 // containment claims.
 package core
 
-import "cloudbox/internal/cluster"
+import (
+	"cloudbox/internal/cluster"
+	"cloudbox/internal/refusal"
+)
 
 // AttemptEgress evaluates one connection attempt from a workload inside a
 // sandbox and records a blocked attempt with destination, timestamp, and
@@ -13,11 +16,11 @@ func (c *Core) AttemptEgress(sandboxName, workload, destination string) (cluster
 	defer c.mu.Unlock()
 	sb, ok := c.sandboxes[sandboxName]
 	if !ok {
-		return cluster.EgressResult{}, errf(404, "sandbox %q is not known", sandboxName)
+		return cluster.EgressResult{}, notFound("sandbox", "sandbox %q is not known", sandboxName)
 	}
 	host, ok := c.driver.Cluster(sb.Cluster)
 	if !ok {
-		return cluster.EgressResult{}, errf(404, "cluster %q is not known", sb.Cluster)
+		return cluster.EgressResult{}, notFound("cluster", "cluster %q is not known", sb.Cluster)
 	}
 	result := host.AttemptEgress(sb.Namespace, destination)
 	if !result.Allowed {
@@ -38,10 +41,10 @@ func (c *Core) RequestAllowlistChange(sandboxName, actor, fqdn string) error {
 	defer c.mu.Unlock()
 	sb, ok := c.sandboxes[sandboxName]
 	if !ok {
-		return errf(404, "sandbox %q is not known", sandboxName)
+		return notFound("sandbox", "sandbox %q is not known", sandboxName)
 	}
 	_ = sb
-	return errf(403,
+	return refuse(403, refusal.SealNotWeakened,
 		"the seal is never weakened per sandbox (N5): adding %q to the allowlist is an application-policy change — submit it for admin review as an audited change to the application's boundary contract",
 		fqdn)
 }
@@ -52,7 +55,7 @@ func (c *Core) UpdateAllowlist(appName, admin string, allowlist []string) error 
 	defer c.mu.Unlock()
 	app, ok := c.apps[appName]
 	if !ok {
-		return errf(404, "application %q is not known", appName)
+		return notFound("application", "application %q is not known", appName)
 	}
 	app.Contract.EgressAllowlist = append([]string{}, allowlist...)
 	c.recordAudit(admin, "allowlist-change", appName, "egress allowlist updated")

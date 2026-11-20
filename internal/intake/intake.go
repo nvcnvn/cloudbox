@@ -12,7 +12,12 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"cloudbox/internal/cluster"
+	"cloudbox/internal/refusal"
 )
+
+// Rejected is the reason a bundle with blockers is refused with, by the
+// control plane at apply and by the offline check alike (ADR 0012).
+const Rejected = refusal.BundleRejected
 
 // Finding is one intake analysis result. Blockers reject the apply; lint
 // findings guide without blocking (the seal, not the lint, is the enforcement

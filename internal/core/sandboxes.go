@@ -11,6 +11,7 @@ import (
 
 	"cloudbox/internal/cluster"
 	"cloudbox/internal/release"
+	"cloudbox/internal/refusal"
 )
 
 // BlockedAttempt is one recorded, attributed denied egress attempt (N4).
@@ -113,10 +114,10 @@ func (c *Core) sandboxHost(app *Application) (cluster.Cluster, error) {
 	if app != nil && app.SandboxCluster != "" {
 		cl, ok := c.driver.Cluster(app.SandboxCluster)
 		if !ok {
-			return nil, errf(404, "application sandbox cluster %q is not known", app.SandboxCluster)
+			return nil, notFound("cluster", "application sandbox cluster %q is not known", app.SandboxCluster)
 		}
 		if !c.roles[app.SandboxCluster]["sandbox"] {
-			return nil, errf(409,
+			return nil, refuse(409, refusal.NoSandboxHost,
 				"application sandbox cluster %q is not a registered sandbox host: register it as a sandbox host first (registration proves it enforces NetworkPolicy)",
 				app.SandboxCluster)
 		}
@@ -129,7 +130,7 @@ func (c *Core) sandboxHost(app *Application) (cluster.Cluster, error) {
 			}
 		}
 	}
-	return nil, errf(409, "no sandbox host is registered: register a cluster that enforces NetworkPolicy as a sandbox host first")
+	return nil, refuse(409, refusal.NoSandboxHost, "no sandbox host is registered: register a cluster that enforces NetworkPolicy as a sandbox host first")
 }
 
 // CreateSandboxOptions vary one creation.
@@ -149,7 +150,7 @@ func (c *Core) CreateSandbox(appName, actor string, opts CreateSandboxOptions) (
 func (c *Core) createSandboxLocked(appName, actor string, opts CreateSandboxOptions) (*Sandbox, error) {
 	app, ok := c.apps[appName]
 	if !ok {
-		return nil, errf(404, "application %q is not known", appName)
+		return nil, notFound("application", "application %q is not known", appName)
 	}
 
 	start := c.now()
@@ -219,12 +220,12 @@ func (c *Core) CompleteSeal(sandboxName string) error {
 	defer c.mu.Unlock()
 	sb, ok := c.sandboxes[sandboxName]
 	if !ok {
-		return errf(404, "sandbox %q is not known", sandboxName)
+		return notFound("sandbox", "sandbox %q is not known", sandboxName)
 	}
 	app := c.apps[sb.App]
 	host, ok := c.driver.Cluster(sb.Cluster)
 	if !ok {
-		return errf(404, "cluster %q is not known", sb.Cluster)
+		return notFound("cluster", "cluster %q is not known", sb.Cluster)
 	}
 	c.sealSandboxLocked(sb, app, host)
 	sb.ReadySeconds = c.now().Sub(sb.CreatedAt).Seconds()
@@ -237,10 +238,10 @@ func (c *Core) DestroySandbox(name, actor string) error {
 	defer c.mu.Unlock()
 	sb, ok := c.sandboxes[name]
 	if !ok {
-		return errf(404, "sandbox %q is not known", name)
+		return notFound("sandbox", "sandbox %q is not known", name)
 	}
 	if actor != "" && sb.Owner != actor {
-		return errf(403, "sandbox %q is owned by %s: only the owner may modify it (S1)", name, sb.Owner)
+		return refuse(403, refusal.NotOwner, "sandbox %q is owned by %s: only the owner may modify it (S1)", name, sb.Owner)
 	}
 	c.destroyLocked(sb)
 	return nil
@@ -355,7 +356,7 @@ func (c *Core) GetSandbox(name string) (*Sandbox, error) {
 	defer c.mu.Unlock()
 	sb, ok := c.sandboxes[name]
 	if !ok {
-		return nil, errf(404, "sandbox %q is not known", name)
+		return nil, notFound("sandbox", "sandbox %q is not known", name)
 	}
 	c.refreshObservedDiagnosticsLocked(sb)
 	c.refreshBlockedEgressLocked(sb)
@@ -369,7 +370,7 @@ func (c *Core) SandboxWorkloads(name string) ([]cluster.Workload, error) {
 	defer c.mu.Unlock()
 	sb, ok := c.sandboxes[name]
 	if !ok {
-		return nil, errf(404, "sandbox %q is not known", name)
+		return nil, notFound("sandbox", "sandbox %q is not known", name)
 	}
 	host, ok := c.driver.Cluster(sb.Cluster)
 	if !ok {

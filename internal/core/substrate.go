@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"cloudbox/internal/cluster"
+	"cloudbox/internal/refusal"
 )
 
 // Lockfile is the per-application substrate lockfile (P1).
@@ -184,11 +185,11 @@ func (c *Core) SubstrateLockfile(appName string) (*Lockfile, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if _, ok := c.apps[appName]; !ok {
-		return nil, errf(404, "application %q is not known", appName)
+		return nil, notFound("application", "application %q is not known", appName)
 	}
 	prod, ok := c.productionCluster()
 	if !ok {
-		return nil, errf(409, "no production cluster registered")
+		return nil, refuse(409, refusal.PrerequisiteMissing, "no production cluster registered")
 	}
 	return c.lockfileFor(appName, prod), nil
 }
