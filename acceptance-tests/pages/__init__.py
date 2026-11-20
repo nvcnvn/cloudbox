@@ -12,6 +12,7 @@ from pages.check import CheckPage
 from pages.ci import CIConfigPage
 from pages.conformance import ConformanceSubsetPage
 from pages.divergences import SimDivergencesPage
+from pages.docs import DocsPage
 from pages.kube import KubeClusterPage
 from pages.platform import PlatformPage
 from pages.runner import RunnerPage
@@ -34,3 +35,4 @@ def attach(context):
     context.kube_nonenforcing = KubeClusterPage.nonenforcing()
     context.ci_config = CIConfigPage()
     context.sim_divergences = SimDivergencesPage()
+    context.docs = DocsPage()

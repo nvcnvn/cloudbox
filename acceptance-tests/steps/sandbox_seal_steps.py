@@ -348,6 +348,12 @@ def step_impl(context):
 
 @when("an operator reviews it")
 def step_impl(context):
+    # Shared phrasing: a documentation page under review (user-documentation)
+    # or the published containment statement (this capability).
+    page = getattr(context, "doc_under_review", None)
+    if page is not None:
+        context.reviewed_text = context.docs.text(page)
+        return
     context.containment_text = str(context.containment).lower()
 
 
