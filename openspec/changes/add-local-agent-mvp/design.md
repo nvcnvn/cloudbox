@@ -309,11 +309,16 @@ removes.
    (digest-pinned versus version-tagged), and multi-architecture coverage are
    unresolved, and the last one bites immediately: the conformance harness
    already selects `arm64` or `amd64` per node.
-3. **Should the daemon's local state file record more than the build version —
-   in particular, registered clusters — so a restart is less costly?** This
-   edges toward the durable-state decision the change explicitly defers, and
-   the line between "reconnection hint" and "persistence" needs drawing before
-   implementation rather than during it.
+3. **Resolved (2026-11-20): the state file records how to reach the daemon and
+   which build started it, nothing more.** Its fields are address, pid,
+   driver, start time, and build identity (version plus a digest of the
+   `cloudboxd` binary, so a rebuilt daemon is replaced, not reused). The line
+   is this: anything the file holds must be true of the *process*, not of the
+   *product's state*. Registered clusters fail that test. Replaying them on
+   restart would be persistence by the back door: a second, unvalidated copy
+   of control-plane state that can disagree with the cluster. It belongs with
+   the CRD-versus-database decision this change defers. The cost is the
+   documented one: after a restart, the agent re-registers.
 4. **Do any of this change's new rules belong in the `@conformance` subset?**
    Enforcement refusal at registration (D2) is genuinely cluster-dependent and
    arguably must be proven against the non-enforcing cluster CI already stands
