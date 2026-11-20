@@ -149,10 +149,21 @@ destroy the sandbox.
 
 ### Refusal
 
-An outcome in which CloudBox declines a request, names the reason, and records
-nothing. A refusal means the product is working as designed. When an
-operation depends on an integration this release does not have, CloudBox
-refuses rather than pretending to succeed.
+An outcome in which CloudBox declines a request, names its
+[refusal reason](#refusal-reason), and records nothing. A refusal means the
+product is working as designed. When an operation depends on an integration
+this release does not have, CloudBox refuses rather than pretending to
+succeed.
+
+### Refusal reason
+
+The stable code that names which refusal a request met, such as
+`no-sandbox-host` or `not-owner`. It is carried as `reason` beside the human
+message in the machine-readable rendering. A `not-found` refusal also names
+its `subject`, the kind of thing that does not exist. Reasons come from a
+closed catalog that `cloudbox reasons` lists: a reason is never renamed,
+reused, or removed, so a program can branch on it. The message is for people
+and may change.
 
 ### Adoption level
 

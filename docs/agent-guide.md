@@ -30,8 +30,11 @@ admitted. If `.sealed` is false, stop: the host failed its enforcement probe.
 cloudbox -o json apply -a web -s web-sbx-7f3a-1 -f ./k8s/
 ```
 
-A refusal (exit `1`) carries `findings`. Each one names the manifest and the
-fix. Fix the manifests rather than retrying.
+A refusal (exit `1`) names its `reason`. Branch on that code, never on the
+`error` text, which may be reworded. Here the reason is `bundle-rejected`,
+and the refusal carries `findings`: each one names the manifest and the fix.
+Fix the manifests rather than retrying. `cloudbox reasons` lists every code,
+and [Troubleshooting](troubleshooting.md) says what to do about each.
 
 ## 4. Test
 

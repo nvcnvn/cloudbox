@@ -33,9 +33,9 @@ Standing constraints:
 
 ## 3. Documentation — red → green → commit per rule
 
-- [ ] 3.1 Add **Refusal reason** to `glossary/business.md` and point **Refusal** at it; define it on `docs/concepts.md` (design D6); the existing concepts rule stays green
-- [ ] 3.2 user-documentation: every outcome the release names has a troubleshooting entry — the docs page object locates refusal entries by reason code from `cloudbox reasons -o json`; rewrite `docs/troubleshooting.md` with one entry per reason (headings carry the code; the two existing refusal entries become `enforcement-unproven` and `integration-missing`), and keep the three entries for outcomes that are not refusals
-- [ ] 3.3 `docs/cli-reference.md`: document `reasons` and the `reason`/`subject` fields of refused machine-readable output; `docs/agent-guide.md`: show branching on `reason` once, where the guide meets its first refusal; the CLI reference and agent guide rules stay green
+- [x] 3.1 Add **Refusal reason** to `glossary/business.md` and point **Refusal** at it; define it on `docs/concepts.md` (design D6); the existing concepts rule stays green
+- [x] 3.2 user-documentation: every outcome the release names has a troubleshooting entry — the docs page object locates refusal entries by reason code from `cloudbox reasons -o json`; rewrite `docs/troubleshooting.md` with one entry per reason (headings carry the code; the two existing refusal entries become `enforcement-unproven` and `integration-missing`), and keep the three entries for outcomes that are not refusals
+- [x] 3.3 `docs/cli-reference.md`: document `reasons` and the `reason`/`subject` fields of refused machine-readable output; `docs/agent-guide.md`: show branching on `reason` once, where the guide meets its first refusal; the CLI reference and agent guide rules stay green
 
 ## 4. Completion
 

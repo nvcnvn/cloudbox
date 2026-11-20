@@ -238,9 +238,20 @@ class DocsPage:
     def outcome_entry(self, outcome):
         return _section_body(self.text("troubleshooting"), OUTCOMES[outcome])
 
+    # --- refusal entries, keyed by reason code (add-stable-refusal-reasons D5)
+
+    def reason_entry(self, code):
+        """The troubleshooting entry whose heading carries `code`; None if absent."""
+        return _section_body(self.text("troubleshooting"), "`%s`" % code)
+
+    def keyed_reason_codes(self):
+        """The reason codes the troubleshooting guide keys entries on."""
+        return [m.group(1) for h in self.headings("troubleshooting") if (m := _REASON_KEY.match(h))]
+
 
 # --- product-checked facts (design D2) -----------------------------------------
 
+import json as _json
 import subprocess as _subprocess
 
 # The commands the specs require of the command line (design D4).
@@ -261,6 +272,7 @@ OUTCOMES = {
 }
 
 _UNREACHABLE = "http://127.0.0.1:1"
+_REASON_KEY = re.compile(r"^`([a-z][a-z-]*)`:")
 _BOOTSTRAP = re.compile(r"(?<![\w/.-])((?:\.?/)?scripts/[\w./-]+\.sh)")
 
 
@@ -300,6 +312,12 @@ class CommandLine:
 
     def recognises(self, command):
         return "unknown command" not in self.usage_of(command)
+
+    def listed_reasons(self):
+        """The refusal-reason codes `cloudbox reasons -o json` lists."""
+        out = self.run("-o", "json", "reasons")
+        assert out.returncode == 0, out.stdout + out.stderr
+        return [r["code"] for r in _json.loads(out.stdout)["reasons"]]
 
 
 def _section_body(text, heading_phrase):

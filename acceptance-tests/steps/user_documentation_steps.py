@@ -379,3 +379,51 @@ def step_impl(context):
 @then("the entry states what the operator can do about it")
 def step_impl(context):
     assert context.docs.states(context.outcome_entry, "remedy"), context.outcome_entry
+
+
+# --- Refusal entries are keyed by reason code (add-stable-refusal-reasons 3.2) ---
+
+
+@given("the refusal-reason catalog the command line lists")
+def step_impl(context):
+    context.listed_reasons = context.command_line.listed_reasons()
+
+
+@when("the entry for each listed reason is looked up by its code")
+def step_impl(context):
+    context.reason_entries = {code: context.docs.reason_entry(code) for code in context.listed_reasons}
+
+
+@then("every listed reason has an entry")
+def step_impl(context):
+    missing = [code for code, entry in context.reason_entries.items() if not entry]
+    assert not missing, "no troubleshooting entry for: %s" % missing
+
+
+@then("each entry states what the outcome means")
+def step_impl(context):
+    lacking = [c for c, e in context.reason_entries.items() if not context.docs.states(e, "means")]
+    assert not lacking, "entries that do not say what the outcome means: %s" % lacking
+
+
+@then("each entry states what the operator can do about it")
+def step_impl(context):
+    lacking = [c for c, e in context.reason_entries.items() if not context.docs.states(e, "remedy")]
+    assert not lacking, "entries that do not say what to do: %s" % lacking
+
+
+@given("the reason codes the troubleshooting guide keys its entries on")
+def step_impl(context):
+    context.keyed_reasons = context.docs.keyed_reason_codes()
+    assert context.keyed_reasons, "the troubleshooting guide keys no entry on a reason code"
+
+
+@when("each is compared with the refusal-reason catalog the command line lists")
+def step_impl(context):
+    listed = context.command_line.listed_reasons()
+    context.unlisted_reasons = [c for c in context.keyed_reasons if c not in listed]
+
+
+@then("the command line lists every one of them")
+def step_impl(context):
+    assert not context.unlisted_reasons, "keyed on reasons the product does not list: %s" % context.unlisted_reasons
