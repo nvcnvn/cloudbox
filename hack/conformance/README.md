@@ -6,7 +6,7 @@ against (ADR 0008). Both are idempotent and export kubeconfigs under
 
 | Script | Cluster | Purpose |
 |---|---|---|
-| `kind-enforcing.sh` | `cloudbox-conformance` | The conformance run's target: Kind with Calico enforcing NetworkPolicy. |
+| `kind-enforcing.sh` | `cloudbox-conformance` | The conformance run's target: Kind with Calico enforcing NetworkPolicy, made by the user-facing `scripts/kind-cluster.sh` so the target is the cluster users are told to make. |
 | `kind-nonenforcing.sh` | `cloudbox-nonenforcing` | Deliberately non-enforcing cluster for the probe-failure and gate scenarios (task 4.2). |
 
 ## Pinned versions
