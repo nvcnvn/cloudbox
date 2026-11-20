@@ -17,6 +17,14 @@ type WitnessedActivity struct {
 	Events int       `json:"events"`
 }
 
+// Substrate parity states (substrate-parity). Unverified is its own state,
+// never collapsed into either of the others.
+const (
+	ParityMatch      = "match"
+	ParityMismatch   = "mismatch"
+	ParityUnverified = "unverified"
+)
+
 // DependencyStatus reports how a declared dependency was satisfied (S8/C1).
 type DependencyStatus struct {
 	App    string `json:"app"`
@@ -40,7 +48,11 @@ type Evidence struct {
 	EgressRecordIncomplete bool   `json:"egressRecordIncomplete"`
 	EgressRecordGap        string `json:"egressRecordGap,omitempty"`
 	SubstrateDigest      string             `json:"substrateDigest,omitempty"`
-	SubstrateMatch       bool               `json:"substrateMatch"`
+	// SubstrateParity is match, mismatch, or unverified. It is deliberately
+	// not a boolean: with no production substrate registered there was no
+	// comparison, and a bool would have to call that a match or a mismatch,
+	// both untrue (substrate-parity, design D4).
+	SubstrateParity      string             `json:"substrateParity"`
 	Fidelity             map[string]string  `json:"fidelity"` // datastore → level (D2)
 	CapacityMode         string             `json:"capacityMode,omitempty"`
 	AutoscalersSuspended []string           `json:"autoscalersSuspended,omitempty"`
@@ -140,11 +152,15 @@ func (c *Core) snapshotEvidence(sb *Sandbox) *Evidence {
 		ev.Valid = false
 		ev.InvalidReasons = append(ev.InvalidReasons, "seal not verified")
 	}
-	ev.SubstrateMatch = true
+	ev.SubstrateParity = ParityUnverified
 	if prod, ok := c.productionCluster(); ok {
 		prodDigest := c.lockfileFor(sb.App, prod).Digest
-		ev.SubstrateMatch = ev.SubstrateDigest == prodDigest
-		if !ev.SubstrateMatch && !ev.substrateOverridden {
+		ev.SubstrateParity = ParityMismatch
+		if ev.SubstrateDigest == prodDigest {
+			ev.SubstrateParity = ParityMatch
+		}
+		// Unverified never invalidates: P2 invalidates on mismatch only.
+		if ev.SubstrateParity == ParityMismatch && !ev.substrateOverridden {
 			// P2: evidence is invalid on substrate digest mismatch.
 			ev.Valid = false
 			ev.InvalidReasons = append(ev.InvalidReasons,
@@ -252,9 +268,15 @@ func renderSummary(ev *Evidence) string {
 				ev.EgressRecordGap)
 		}
 	}
-	substrate := "a substrate matching production"
-	if !ev.SubstrateMatch {
+	var substrate string
+	switch ev.SubstrateParity {
+	case ParityMatch:
+		substrate = "a substrate matching production"
+	case ParityMismatch:
 		substrate = "a substrate NOT matching production"
+	default:
+		// Never fall through to a match: an uncompared run says so.
+		substrate = "a substrate whose parity with production is UNVERIFIED (no production substrate is registered, so none was compared)"
 	}
 
 	return fmt.Sprintf(

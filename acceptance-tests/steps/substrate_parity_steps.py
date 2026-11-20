@@ -254,3 +254,78 @@ def step_impl(context):
     assert context.platform.lockfile("app-b")["digest"] == context.digest_b
     evidence = context.sandboxes.evidence(context.sandbox_b)
     assert evidence["valid"], evidence
+
+# --- Parity with no registered production is unverified (add-local-agent-mvp 1.1) ---
+
+PARITY_UNVERIFIED = "unverified"
+
+
+def _run_without_production(context):
+    context.platform.ensure_sandbox_only_platform()
+    context.app_name = "web"
+    context.sandbox_name = _app_with_bundle(context, "web", CERT_MANAGER_BUNDLE)
+
+
+@given("an application with no registered production substrate")
+def step_impl(context):
+    context.platform.ensure_sandbox_only_platform()
+    context.app_name = "web"
+
+
+@given("a sealed sandbox run for that application")
+def step_impl(context):
+    context.sandbox_name = _app_with_bundle(context, context.app_name, CERT_MANAGER_BUNDLE)
+
+
+@given("evidence for a run whose application has no registered production substrate")
+def step_impl(context):
+    _run_without_production(context)
+
+
+@given("an application whose evidence records substrate parity as unverified")
+def step_impl(context):
+    _run_without_production(context)
+    ev = context.sandboxes.evidence(context.sandbox_name)
+    assert ev["substrateParity"] == PARITY_UNVERIFIED, ev
+
+
+@when("a production substrate is registered for it")
+def step_impl(context):
+    context.platform.register_production()
+
+
+@then("the evidence records substrate parity as unverified")
+def step_impl(context):
+    assert context.evidence["substrateParity"] == PARITY_UNVERIFIED, context.evidence
+
+
+@then("it does not record a substrate match")
+def step_impl(context):
+    assert context.evidence["substrateParity"] != "match", context.evidence
+    assert "substrateMatch" not in context.evidence, (
+        "a boolean match field survives beside the parity state", context.evidence
+    )
+
+
+@then("it states that substrate parity is unverified for want of a registered production substrate")
+def step_impl(context):
+    summary = context.summary.lower()
+    assert "parity" in summary and "unverified" in summary, context.summary
+    assert "no production substrate is registered" in summary, context.summary
+
+
+@then("it nowhere claims the run was on a substrate matching production")
+def step_impl(context):
+    assert "matching production" not in context.summary.lower().replace("not matching production", ""), context.summary
+
+
+@then("the evidence is not marked invalid for substrate mismatch")
+def step_impl(context):
+    reasons = " ".join(context.evidence.get("invalidReasons") or [])
+    assert "substrate mismatch" not in reasons, reasons
+
+
+@then("subsequent evidence records a substrate match or a mismatch rather than unverified")
+def step_impl(context):
+    ev = context.sandboxes.evidence(context.sandbox_name)
+    assert ev["substrateParity"] in ("match", "mismatch"), ev

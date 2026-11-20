@@ -50,6 +50,19 @@ class PlatformPage:
         self.register_cluster(name, "production")
         return name
 
+    def ensure_sandbox_only_platform(self, name="sbx-only"):
+        """A sandbox host with no production registered anywhere — the
+        normal state of a sandbox-level release (substrate-parity)."""
+        self.ensure_cluster(name)
+        self.run_setup(name).raise_for_status()
+        self.register_cluster(name, "sandbox")
+        return name
+
+    def register_production(self, name="prod-cluster"):
+        self.ensure_cluster(name)
+        self.register_cluster(name, "production")
+        return name
+
     def ensure_split_platform(self, components=None):
         """Separate sandbox and production clusters (CP3), optionally with the
         same substrate components installed on both."""

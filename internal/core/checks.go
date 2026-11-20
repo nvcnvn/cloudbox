@@ -125,8 +125,14 @@ func (c *Core) PostEvidenceCheck(sandboxName, pr string) (*PRCheck, error) {
 	if ev.EgressViolations > 0 {
 		failures = append(failures, fmt.Sprintf("seal violations: %d blocked egress attempt(s) recorded", ev.EgressViolations))
 	}
-	if !ev.SubstrateMatch {
+	switch ev.SubstrateParity {
+	case ParityMatch:
+	case ParityMismatch:
 		failures = append(failures, "substrate does not match production")
+	default:
+		// An uncompared substrate is not a matched one; a check never passes
+		// on parity it did not verify (substrate-parity).
+		failures = append(failures, "substrate parity unverified: no production substrate is registered")
 	}
 	if min := c.applicableMinFidelity(app, ev.BundleDigest); min != "" && fidelityBelow(ev.Fidelity, min) {
 		failures = append(failures, fmt.Sprintf("fidelity below the policy minimum %q", min))

@@ -160,7 +160,7 @@ def step_impl(context):
     assert set(shared.keys()) == set(split.keys()), (
         "evidence fact sets differ between topologies"
     )
-    for field in ("sealStatus", "valid", "substrateMatch", "capacityMode", "egressViolations"):
+    for field in ("sealStatus", "valid", "substrateParity", "capacityMode", "egressViolations"):
         assert shared[field] == split[field], (field, shared[field], split[field])
     assert shared["substrateDigest"] == split["substrateDigest"], (
         "same components must yield the same app-scoped substrate digest"
