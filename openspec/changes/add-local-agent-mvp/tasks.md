@@ -60,7 +60,7 @@ that simulates.
 
 ## 4. Release engineering
 
-- [ ] 4.1 Resolve design Open Question 2 before any of 4.2–4.4: which registry publishes the egress proxy image, digest-pinned versus version-tagged, and multi-architecture coverage. The last one bites immediately — `hack/conformance/build-proxy-image.sh` already selects `arm64` or `amd64` per node. Record the decision with its reason
+- [x] 4.1 Resolve design Open Question 2 before any of 4.2–4.4: which registry publishes the egress proxy image, digest-pinned versus version-tagged, and multi-architecture coverage. The last one bites immediately — `hack/conformance/build-proxy-image.sh` already selects `arm64` or `amd64` per node. Record the decision with its reason
 - [ ] 4.2 release-integrity: the egress proxy is deployed from a pinned, resolvable reference — replace `proxyImage()`'s `cloudbox-egress-proxy:dev` in `internal/cluster/kube/proxy.go:26` with the published pinned reference, and add the release job that builds and pushes it — red → green → commit
 - [ ] 4.3 release-integrity: a sandbox whose proxy cannot be provisioned is never reported as allowlist-enforcing — report the proxy unavailable naming the unresolvable reference, keep allowlisted egress failing closed, and never report the sandbox as enforcing its allowlist. Default-deny still holds without the proxy; the allowlist does not — red → green → commit
 - [ ] 4.4 release-integrity: the released binaries identify the build they came from — stamp the version at build time on both binaries, replacing the hardcoded `"cloudbox v1 (development)"` in `cmd/cloudbox/main.go`, and make a locally built binary identify itself as unreleased — red → green → commit

@@ -303,12 +303,18 @@ removes.
    control plane dies mid-probe, the timestamped namespaces leak. They are
    identifiable by prefix, hold only a completed canary pod, and are accepted
    rather than given a reaper.
-2. **How is the pinned proxy image published, and by whom?** The reference must
-   be resolvable from an arbitrary user cluster, which implies a public
-   registry and a release job that pushes it. Registry choice, tagging scheme
-   (digest-pinned versus version-tagged), and multi-architecture coverage are
-   unresolved, and the last one bites immediately: the conformance harness
-   already selects `arm64` or `amd64` per node.
+2. **Resolved (2026-11-20): GHCR, digest-pinned, multi-arch, published by the
+   release job.** The image is `ghcr.io/nvcnvn/cloudbox-egress-proxy`. A
+   GitHub Actions release job runs on a version tag, builds `linux/amd64` and
+   `linux/arm64` with buildx, pushes with the workflow's own `GITHUB_TOKEN`,
+   and stamps the pushed manifest-list digest into both binaries as
+   `ghcr.io/nvcnvn/cloudbox-egress-proxy@sha256:…`. Reasons: a digest cannot
+   be re-pointed after release, so the binary and the image it deploys are
+   one artifact. GHCR needs no credential beyond the repository's own, and is
+   anonymously pullable once the package is public. A manifest list lets
+   every node resolve its own architecture, which the conformance harness
+   already needs. An unreleased build keeps the locally loaded `:dev` image
+   and says so (task 4.4).
 3. **Resolved (2026-11-20): the state file records how to reach the daemon and
    which build started it, nothing more.** Its fields are address, pid,
    driver, start time, and build identity (version plus a digest of the
