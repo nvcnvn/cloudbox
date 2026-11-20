@@ -38,6 +38,26 @@ class CliRun:
     def data(self):
         return json.loads(self.stdout)
 
+    # --- a refusal in the machine-readable rendering (ADR 0012) -----------
+
+    def refused(self):
+        return self.exit_code == EXIT_REFUSED
+
+    def reason(self):
+        return self.data().get("reason")
+
+    def subject(self):
+        return self.data().get("subject")
+
+    # --- the refusal-reason catalog ---------------------------------------
+
+    def reason_entries(self):
+        """(code, summary) for each reason a `reasons -o json` run listed."""
+        return [(r.get("code"), r.get("summary")) for r in self.data()["reasons"]]
+
+    def reason_codes(self):
+        return [code for code, _ in self.reason_entries()]
+
 
 class CliPage:
     def __init__(self, cli_path, base_url):
@@ -74,8 +94,8 @@ class CliPage:
         env["CLOUDBOXD"] = str(REPO / "bin" / "cloudboxd")
         return self._run(args, None, as_user, json_output, env)
 
-    def unreachable(self, *args):
-        return self._run(args, UNREACHABLE_SERVER)
+    def unreachable(self, *args, json_output=True):
+        return self._run(args, UNREACHABLE_SERVER, json_output=json_output)
 
     # --- the local control plane ---------------------------------------------
 
@@ -157,8 +177,20 @@ class CliPage:
     def explain(self, sandbox, json_output=True):
         return self.addressed("status", "-s", sandbox, "--explain", json_output=json_output)
 
-    def destroy(self, sandbox):
-        return self.addressed("sandbox", "destroy", "-s", sandbox)
+    def destroy(self, sandbox, as_user="dev@example.com"):
+        return self.addressed("sandbox", "destroy", "-s", sandbox, as_user=as_user)
+
+    def status(self, sandbox):
+        return self.addressed("status", "-s", sandbox)
+
+    # --- offline commands: addressed at nothing, so they prove they need no
+    # control plane -------------------------------------------------------------
+
+    def check_offline(self, directory):
+        return self.unreachable("check", "-f", directory)
+
+    def reasons(self, json_output=True):
+        return self.unreachable("reasons", json_output=json_output)
 
     def refused_command(self):
         return self.addressed("sandbox", "create", "-a", "no-such-application")

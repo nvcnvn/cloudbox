@@ -72,6 +72,15 @@ func (c *client) fail(command string, f *failure) int {
 		if f.status != 0 {
 			out["status"] = f.status
 		}
+		if f.reason != "" {
+			out["reason"] = f.reason
+		}
+		if f.subject != "" {
+			out["subject"] = f.subject
+		}
+		if f.findings != nil {
+			out["findings"] = f.findings
+		}
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
 		_ = enc.Encode(out)

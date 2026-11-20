@@ -31,11 +31,16 @@ type client struct {
 	ensure func() (string, error)
 }
 
-// failure is a non-success outcome carrying its exit status.
+// failure is a non-success outcome carrying its exit status. A refusal also
+// carries the control plane's reason (ADR 0012) and, for not-found, its
+// subject; usage and unreachable failures are not refusals and carry neither.
 type failure struct {
-	exit    int
-	status  int
-	message string
+	exit     int
+	status   int
+	message  string
+	reason   string
+	subject  string
+	findings any // check's offline report; nil elsewhere
 }
 
 func (c *client) base() (string, *failure) {
@@ -86,7 +91,10 @@ func (c *client) call(method, path string, body any) (map[string]any, *failure) 
 		if msg == "" {
 			msg = fmt.Sprintf("request refused with status %d", resp.StatusCode)
 		}
-		return out, &failure{exit: exitRefused, status: resp.StatusCode, message: msg}
+		reason, _ := out["reason"].(string)
+		subject, _ := out["subject"].(string)
+		return out, &failure{exit: exitRefused, status: resp.StatusCode, message: msg,
+			reason: reason, subject: subject, findings: out["findings"]}
 	}
 	return out, nil
 }

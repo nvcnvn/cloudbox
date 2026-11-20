@@ -246,7 +246,7 @@ import subprocess as _subprocess
 # The commands the specs require of the command line (design D4).
 SPEC_COMMANDS = {
     "check", "cluster", "app", "sandbox", "apply", "test", "status", "evidence",
-    "logs", "exec", "port-forward", "server", "version",
+    "logs", "exec", "port-forward", "server", "version", "reasons",
 }
 GLOBAL_OPTIONS = {"--server", "--as", "-o", "--output"}
 LOOP_STAGES = ["declare", "create", "apply", "test", "explain", "amend", "evidence", "destroy"]

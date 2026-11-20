@@ -13,8 +13,12 @@ assertion.
 
 
 class Refusal:
-    """Whether a request was refused, and what to print if it was not."""
+    """Whether a request was refused, and what to print if it was not. A
+    surface that reports the refusal's reason (and, for not-found, its
+    subject) records those too (ADR 0012)."""
 
-    def __init__(self, refused, detail):
+    def __init__(self, refused, detail, reason=None, subject=None):
         self.refused = bool(refused)
         self.detail = detail
+        self.reason = reason
+        self.subject = subject

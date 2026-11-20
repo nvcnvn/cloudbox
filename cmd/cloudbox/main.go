@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 
+	"cloudbox/internal/refusal"
 	"cloudbox/internal/release"
 )
 
@@ -33,6 +34,7 @@ Commands:
   exec          run a command in a workload
   port-forward  reach a workload from this machine
   server        status or stop the local control plane
+  reasons       the refusal-reason catalog a program can branch on
   version       the build this binary came from
 
 With no --server, cloudbox starts a local control plane and reuses it.
@@ -72,7 +74,7 @@ parsed:
 	}
 	switch args[0] {
 	case "check":
-		return runCheck(args[1:])
+		return runCheck(c, args[1:])
 	case "cluster":
 		return runCluster(c, args[1:])
 	case "app":
@@ -95,9 +97,22 @@ parsed:
 		return runPortForward(c, args[1:])
 	case "server":
 		return runServer(c, args[1:])
+	case "reasons":
+		return runReasons(c)
 	case "version":
 		return c.emit((&view{}).add("version", release.Describe()).add("released", release.Released()))
 	}
 	fmt.Fprintf(os.Stderr, "cloudbox: unknown command %q\n\n%s", args[0], usage)
 	return exitUsage
+}
+
+// runReasons lists the refusal-reason catalog (ADR 0012). It reads the leaf
+// catalog package, so it needs no control plane.
+func runReasons(c *client) int {
+	catalog := refusal.Catalog()
+	return c.emit((&view{human: func(*view) {
+		for _, e := range catalog {
+			fmt.Printf("%-22s %s\n", e.Code, e.Summary)
+		}
+	}}).add("reasons", catalog))
 }

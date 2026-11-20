@@ -27,9 +27,9 @@ Standing constraints:
 
 ## 2. Developer ergonomics — red → green → commit per rule
 
-- [ ] 2.1 developer-ergonomics: every refusal names a stable reason from the published catalog — CLI `failure` carries `reason` and `subject` from the body; machine-readable output adds them; `cloudbox check` offline rejections carry `bundle-rejected` via `internal/intake`; steps for the outline and the offline scenario
-- [ ] 2.2 developer-ergonomics: a not-found refusal names the kind of thing that was not found — steps for the sandbox and application rows
-- [ ] 2.3 developer-ergonomics: the command line lists the refusal-reason catalog — add `cloudbox reasons` (offline, both renderings) and list it in usage; steps read the spec table from the extracted feature, not a copy in the test
+- [x] 2.1 developer-ergonomics: every refusal names a stable reason from the published catalog — CLI `failure` carries `reason` and `subject` from the body; machine-readable output adds them; `cloudbox check` offline rejections carry `bundle-rejected` via `internal/intake`; steps for the outline and the offline scenario
+- [x] 2.2 developer-ergonomics: a not-found refusal names the kind of thing that was not found — steps for the sandbox and application rows
+- [x] 2.3 developer-ergonomics: the command line lists the refusal-reason catalog — add `cloudbox reasons` (offline, both renderings) and list it in usage; steps read the spec table from the extracted feature, not a copy in the test
 
 ## 3. Documentation — red → green → commit per rule
 

@@ -13,7 +13,7 @@ import (
 	"cloudbox/internal/intake"
 )
 
-func runCheck(args []string) int {
+func runCheck(c *client, args []string) int {
 	dir := ""
 	for i := 0; i < len(args); i++ {
 		if args[i] == "-f" && i+1 < len(args) {
@@ -22,15 +22,13 @@ func runCheck(args []string) int {
 		}
 	}
 	if dir == "" {
-		fmt.Fprintln(os.Stderr, "usage: cloudbox check -f <dir>")
-		return 2
+		return c.usage("check", "cloudbox check -f <dir>")
 	}
 
 	var docs []string
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "check: %v\n", err)
-		return 2
+		return c.fail("check", &failure{exit: exitUsage, message: err.Error()})
 	}
 	for _, e := range entries {
 		ext := filepath.Ext(e.Name())
@@ -39,28 +37,33 @@ func runCheck(args []string) int {
 		}
 		content, err := os.ReadFile(filepath.Join(dir, e.Name()))
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "check: %v\n", err)
-			return 2
+			return c.fail("check", &failure{exit: exitUsage, message: err.Error()})
 		}
 		docs = append(docs, string(content))
 	}
 
 	objects, err := intake.ParseManifests(strings.Join(docs, "\n---\n"))
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "check: %v\n", err)
-		return 1
+		return c.fail("check", &failure{exit: exitRefused, message: err.Error(), reason: string(intake.Rejected)})
 	}
 
 	// No boundary contract is available offline: contract-dependent rules
 	// (undeclared secrets) are exactly why server-side intake stays
 	// authoritative.
 	analysis := intake.AnalyzeManifests(objects, nil)
+	blockers := len(analysis.Blockers())
 
-	blockers := 0
-	for _, f := range analysis.Findings {
-		if f.Level == "blocker" {
-			blockers++
+	if c.output == "json" {
+		if blockers > 0 {
+			return c.fail("check", &failure{exit: exitRefused, reason: string(intake.Rejected),
+				message:  fmt.Sprintf("%d blocker(s): fix the findings, then re-run check", blockers),
+				findings: analysis.Findings})
 		}
+		return c.emit((&view{}).add("compatible", true).
+			add("findings", analysis.Findings).add("transforms", analysis.Transforms))
+	}
+
+	for _, f := range analysis.Findings {
 		fmt.Printf("%s  %s  %s\n    %s\n", strings.ToUpper(f.Level), f.Code, f.Manifest, f.Message)
 		if f.Suggestion != "" {
 			fmt.Printf("    fix: %s\n", f.Suggestion)

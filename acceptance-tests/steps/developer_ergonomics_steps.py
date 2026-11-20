@@ -2,6 +2,8 @@
 
 from behave import given, when, then
 
+from outcomes import Refusal
+
 DEV = "dev@example.com"
 MINH = "minh@example.com"
 
@@ -367,3 +369,167 @@ def step_impl(context):
 @then("none is rejected as an unknown command")
 def step_impl(context):
     assert not context.rejected, context.rejected
+
+
+# --- Every refusal names a stable reason from the published catalog
+#     (add-stable-refusal-reasons 2.1) ---
+#
+# Each When records the refusal it met as an outcomes.Refusal carrying the
+# reason the surface reported; the shared "the request is refused" Then and
+# the reason Thens assert on that.
+
+
+def _cli_refusal(context, run):
+    context.refusal = Refusal(run.refused(), run.output, reason=run.reason(), subject=run.subject())
+
+
+@when("developer Minh destroys it")
+def step_impl(context):
+    _cli_refusal(context, context.cli_surface.destroy(context.sandbox_name, as_user=MINH))
+
+
+@given("a control plane with no registered sandbox host")
+def step_impl(context):
+    context.app_name = "web"
+    declared = context.cli_surface.declare_app(context.app_name)
+    assert declared.exit_code == 0, declared.output
+
+
+@when("an agent creates a sandbox")
+def step_impl(context):
+    _cli_refusal(context, context.cli_surface.create_sandbox(context.app_name))
+
+
+@when("an operator registers it as a sandbox host")
+def step_impl(context):
+    _cli_refusal(context, context.cli_surface.register_host(context.candidate_cluster))
+
+
+@given("a control plane with no source-control integration")
+def step_impl(context):
+    context.execute_steps("Given a released control plane with no source-control integration")
+
+
+@when("an agent posts an evidence check")
+def step_impl(context):
+    # No command posts a check: the SCM integration does, through the control
+    # plane's interface, so that is the surface this refusal is met on.
+    resp = context.release.post_evidence_check(context.sandbox_name, "42")
+    reason, subject = context.release.refusal_reason()
+    context.refusal = Refusal(not resp.ok, resp.text, reason=reason, subject=subject)
+
+
+@given("a bundle with a manifest outside its contract")
+def step_impl(context):
+    context.offending_bundle = context.bundles.cluster_scoped_manifests()
+
+
+@when("an agent applies it to a sandbox")
+def step_impl(context):
+    context.app_name = context.applications.create("web")["name"]
+    context.sandbox_name = context.sandboxes.create(context.app_name, owner=DEV)
+    _cli_refusal(context, context.cli_surface.apply(context.app_name, context.sandbox_name, context.offending_bundle))
+
+
+@when("an agent checks it offline in the machine-readable rendering")
+def step_impl(context):
+    directory = context.check.write_directory({"bundle.yaml": context.offending_bundle})
+    _cli_refusal(context, context.cli_surface.check_offline(directory))
+
+
+@then('the refusal\'s reason is "{reason}"')
+def step_impl(context, reason):
+    assert context.refusal.reason == reason, (context.refusal.reason, context.refusal.detail)
+
+
+@then("the reason is one the refusal-reason catalog lists")
+def step_impl(context):
+    listed = context.cli_surface.reasons().reason_codes()
+    assert context.refusal.reason in listed, (context.refusal.reason, listed)
+
+
+# --- A not-found refusal names the kind of thing that was not found (2.2) ---
+
+
+@given('no {kind} named "{name}" exists')
+def step_impl(context, kind, name):
+    pass  # every scenario starts from an empty control plane
+
+
+@when('an agent {request} "{name}" in the machine-readable rendering')
+def step_impl(context, request, name):
+    surface = context.cli_surface
+    command = {
+        "reads the status of the sandbox": surface.status,
+        "shows the application": surface.show_app,
+    }[request]
+    _cli_refusal(context, command(name))
+
+
+@then('the refusal\'s subject is "{kind}"')
+def step_impl(context, kind):
+    assert context.refusal.subject == kind, (context.refusal.subject, context.refusal.detail)
+
+
+# --- The command line lists the refusal-reason catalog (2.3) ---
+
+CATALOG_OUTLINE = "Every recorded reason is listed by the command line"
+
+
+@given("no control plane is reachable")
+def step_impl(context):
+    pass  # the catalog is requested addressed at an unreachable server
+
+
+@when("the refusal-reason catalog is requested in the machine-readable rendering")
+def step_impl(context):
+    context.reasons_run = context.cli_surface.reasons()
+
+
+@then("the command succeeds")
+def step_impl(context):
+    assert context.reasons_run.exit_code == 0, context.reasons_run.output
+
+
+@then("each listed reason carries its code and a one-line summary")
+def step_impl(context):
+    entries = context.reasons_run.reason_entries()
+    assert entries, context.reasons_run.output
+    for code, summary in entries:
+        assert code and summary and "\n" not in summary, (code, summary)
+
+
+@given("the refusal-reason catalog")
+def step_impl(context):
+    pass  # the catalog is the binary's; the When lists it
+
+
+@when("it is listed from the command line")
+def step_impl(context):
+    surface = context.cli_surface
+    context.listed_reasons = surface.reasons().reason_codes()
+    context.listed_reasons_human = surface.reasons(json_output=False)
+    assert context.listed_reasons_human.exit_code == 0, context.listed_reasons_human.output
+
+
+@then('the listing includes the reason "{reason}"')
+def step_impl(context, reason):
+    assert reason in context.listed_reasons, context.listed_reasons
+    human = context.listed_reasons_human.stdout.split()
+    assert reason in human, context.listed_reasons_human.stdout
+
+
+def _recorded_reasons(context):
+    """The catalog this specification records: the reason column of the
+    catalog outline's Examples, read from the extracted feature itself."""
+    for scenario in context.feature.walk_scenarios(with_outlines=True):
+        if scenario.name == CATALOG_OUTLINE and hasattr(scenario, "examples"):
+            return [row["reason"] for ex in scenario.examples for row in ex.table.rows]
+    raise AssertionError("the specification records no catalog outline")
+
+
+@then("every listed reason is one this specification records")
+def step_impl(context):
+    recorded = _recorded_reasons(context)
+    unrecorded = [r for r in context.listed_reasons if r not in recorded]
+    assert not unrecorded, "listed but not recorded: %s" % unrecorded

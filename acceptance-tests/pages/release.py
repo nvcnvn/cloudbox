@@ -52,6 +52,11 @@ class ReleasePage:
         resp.raise_for_status()
         return resp.json()
 
+    def refusal_reason(self):
+        """(reason, subject) the last refused request named (ADR 0012)."""
+        body = self.last_response.json()
+        return body.get("reason"), body.get("subject")
+
     def refusal(self):
         """(status, message) of the last request."""
         resp = self.last_response

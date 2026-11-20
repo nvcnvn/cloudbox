@@ -19,14 +19,16 @@ cloudbox [--server <url>] [--as <identity>] [-o json] <command> [flags]
   it.
 - `-o json`: render the result as data. The JSON and the human rendering
   carry the same facts. Errors are rendered as `{"error", "outcome",
-  "status"}`.
+  "status"}`. A refusal adds `reason`, a code from `cloudbox reasons`, and a
+  `not-found` refusal adds `subject`, the kind of thing that does not exist.
+  A rejected bundle adds `findings`. Branch on `reason`, not on `error`.
 
 ## Exit statuses
 
 | Exit status | Outcome | Meaning |
 |---|---|---|
 | `0` | success | The command did what it was asked. |
-| `1` | refused | The control plane refused the request, or `check` found blockers. The reason is in the error. |
+| `1` | refused | The control plane refused the request, or `check` found blockers. `reason` names which refusal it was. |
 | `2` | usage | The command line was malformed: an unknown command or flag, or a missing argument. |
 | `3` | unreachable | No control plane could be reached or started. |
 
@@ -36,7 +38,9 @@ cloudbox [--server <url>] [--as <identity>] [-o json] <command> [flags]
 
 `cloudbox check -f <dir>`: the offline compatibility report for a directory
 of manifests. It needs no cluster and no control plane, and runs the same
-intake analysis that `apply` runs server-side.
+intake analysis that `apply` runs server-side. With `-o json` it reports
+`findings` and `transforms`; a bundle with blockers is refused with reason
+`bundle-rejected`, the same reason `apply` reports.
 
 ### `cloudbox cluster`
 
@@ -101,6 +105,13 @@ this machine through the control plane.
 
 `cloudbox server status|stop`: report on, or stop, the local control plane.
 Stopping it loses its evidence.
+
+### `cloudbox reasons`
+
+`cloudbox reasons`: the refusal-reason catalog, each code with a one-line
+summary. It needs no control plane. A reason is never removed or renamed, so
+a program may branch on any code it lists. Each one has an entry in
+[Troubleshooting](troubleshooting.md).
 
 ### `cloudbox version`
 
