@@ -106,6 +106,10 @@ no durable state, and no authentication — which is why it is reachable now.
 - `substrate-parity`: adds that parity is unverified — never matched — when no
   production substrate is registered to compare against, and that evidence and
   its consumers must distinguish unverified parity from a verified match.
+- `kube-driver`: the non-enforcing-CNI rule keeps its guarantee, but its
+  real-cluster scenario moves from sandbox creation to registration, because a
+  non-enforcing cluster can no longer become a sandbox host (including through
+  an application's pinned sandbox cluster).
 - `control-plane`: adds that the command line may start and reuse a local
   control plane on the developer's machine without weakening server-side
   authority; enforcement belongs to the control plane whoever started it.

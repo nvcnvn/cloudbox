@@ -110,6 +110,17 @@ This reuses the conformance run's existing enforcement precondition rather than
 inventing a second mechanism; `conformance-ci` already specifies exactly this
 check and CI already exercises it against a deliberately non-enforcing cluster.
 
+**Pinned clusters are not a way around it (decided 2026-11-20).** An
+application's `sandboxCluster` pin previously named any cluster the driver
+knew, registered or not. That let a sandbox land on a cluster registration
+would have refused, contradicting "no sandbox can be created on it". A pin
+must now name a registered sandbox host. Consequences: the conformance gate
+proves enforcement by registering its target, which is the same probe through
+the same path a user takes. The `kube-driver` real-cluster N7 scenario moves
+to registration. The sandbox-creation probe stays as the last line for a host
+whose CNI stops enforcing after registration, proven in the simulation only
+(recorded divergence).
+
 ### D3: The CLI starts and reuses a control plane; it never becomes one
 
 **Decision.** When no control plane is addressed, the CLI starts one on the
@@ -282,10 +293,16 @@ removes.
 
 ## Open Questions
 
-1. **Does the enforcement probe at registration need its own canary namespace,
-   or can it reuse the seal probe's mechanism unchanged?** The seal probe runs
-   inside a sandbox being provisioned; registration has no sandbox yet. If the
-   probe needs a scratch namespace, its cleanup on failure must be specified.
+1. **Resolved (2026-11-20): registration reuses the seal probe unchanged; it
+   needs no namespace of its own.** The premise was wrong: `ProbeEnforcement()`
+   is cluster-scoped on the frozen contract, not sandbox-scoped. The kube
+   driver already creates its own two scratch namespaces
+   (`cloudbox-probe-base-<ts>`, `cloudbox-probe-seal-<ts>`) and deletes both
+   by `defer` on every return path, failure included. Registration calls it as
+   sandbox creation does, with no contract change (ADR 0008). Residual: if the
+   control plane dies mid-probe, the timestamped namespaces leak. They are
+   identifiable by prefix, hold only a completed canary pod, and are accepted
+   rather than given a reaper.
 2. **How is the pinned proxy image published, and by whom?** The reference must
    be resolvable from an arbitrary user cluster, which implies a public
    registry and a release job that pushes it. Registry choice, tagging scheme
