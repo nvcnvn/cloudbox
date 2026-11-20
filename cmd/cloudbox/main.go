@@ -20,6 +20,21 @@ const usage = `cloudbox — sealed, production-shaped sandboxes with honest evid
 Usage:
   cloudbox [--server <url>] [--as <identity>] [-o json] <command> [flags]
 
+Commands:
+  check         offline compatibility report for a manifest directory
+  cluster       register a cluster you control as a sandbox host
+  app           declare an application and its contract; amend its allowlist
+  sandbox       create or destroy a sealed sandbox
+  apply         apply manifests to a sandbox
+  test          run the application's declared suite in a sandbox
+  status        sandbox state; --explain lists blocked egress and a proposal
+  evidence      the record of a sandbox's run
+  logs          a workload's logs
+  exec          run a command in a workload
+  port-forward  reach a workload from this machine
+  server        status or stop the local control plane
+  version       the build this binary came from
+
 With no --server, cloudbox starts a local control plane and reuses it.
 Run a command without flags for its own usage.
 `

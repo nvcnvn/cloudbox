@@ -39,21 +39,21 @@ headings (design D7).
 
 ## 2. Cluster setup — after MVP 2.1 and 2.5
 
-- [ ] 2.1 user-documentation: the cluster setup guide takes an operator from no cluster to a registered host — write `docs/cluster-setup.md`: enforcing-CNI requirement, the bootstrap script at the path MVP 2.5 chose, registration, and the non-enforcing refusal with what to change. The step asserts the named script exists and is not under `hack/conformance/` — red → green → commit
+- [x] 2.1 user-documentation: the cluster setup guide takes an operator from no cluster to a registered host — write `docs/cluster-setup.md`: enforcing-CNI requirement, the bootstrap script at the path MVP 2.5 chose, registration, and the non-enforcing refusal with what to change. The step asserts the named script exists and is not under `hack/conformance/` — red → green → commit
 
 ## 3. Containment — after MVP 1.6
 
-- [ ] 3.1 user-documentation: the containment page agrees with the product's containment statement — write `docs/containment.md`. The step fetches `/v1/containment-statement` from the suite's running control plane and asserts every blocked channel, residual channel, and recording limit appears on the page; "unbypassable" appears nowhere — red → green → commit
+- [x] 3.1 user-documentation: the containment page agrees with the product's containment statement — write `docs/containment.md`. The step fetches `/v1/containment-statement` from the suite's running control plane and asserts every blocked channel, residual channel, and recording limit appears on the page; "unbypassable" appears nowhere — red → green → commit
 
 ## 4. Command line — after MVP 3.3 and 3.4
 
-- [ ] 4.1 developer-ergonomics: the command line lists every command it accepts — replace the placeholder usage in `cmd/cloudbox/main.go` with the command list. The page object holds the spec-required command set (design D4) — red → green → commit
-- [ ] 4.2 user-documentation: the CLI reference matches the command line in both directions — write `docs/cli-reference.md`: each command with its flags, the machine-readable rendering, and the exit status of each outcome. The steps check the reference against the usage listing, per-command help, and actual exit statuses — red → green → commit
-- [ ] 4.3 user-documentation: the agent guide walks the whole sealed loop with commands that exist — write `docs/agent-guide.md` covering all eight loop stages, with the explain step shown in machine-readable form. The step extracts each example command from fenced `sh` blocks and checks it against the CLI's help — red → green → commit
+- [x] 4.1 developer-ergonomics: the command line lists every command it accepts — replace the placeholder usage in `cmd/cloudbox/main.go` with the command list. The page object holds the spec-required command set (design D4) — red → green → commit
+- [x] 4.2 user-documentation: the CLI reference matches the command line in both directions — write `docs/cli-reference.md`: each command with its flags, the machine-readable rendering, and the exit status of each outcome. The steps check the reference against the usage listing, per-command help, and actual exit statuses — red → green → commit
+- [x] 4.3 user-documentation: the agent guide walks the whole sealed loop with commands that exist — write `docs/agent-guide.md` covering all eight loop stages, with the explain step shown in machine-readable form. The step extracts each example command from fenced `sh` blocks and checks it against the CLI's help — red → green → commit
 
 ## 5. Troubleshooting — after MVP 1.4, 2.1, and 4.3
 
-- [ ] 5.1 user-documentation: every outcome the release names has a troubleshooting entry — write `docs/troubleshooting.md` with one heading per outcome in the spec's Examples table, each with "What it means" and "What to do" — red → green → commit
+- [x] 5.1 user-documentation: every outcome the release names has a troubleshooting entry — write `docs/troubleshooting.md` with one heading per outcome in the spec's Examples table, each with "What it means" and "What to do" — red → green → commit
 - [ ] 5.2 Record design Open Question 1 (stable refusal reasons) as a follow-up proposal or as an explicit decision not to pursue it; do not implement it in this change
 
 ## 6. Completion

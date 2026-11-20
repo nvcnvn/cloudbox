@@ -335,3 +335,35 @@ def step_impl(context):
     assert len(set(codes.values())) == 3, codes
     for outcome in ("refused", "unreachable"):
         assert context.outcome_runs[outcome].data()["outcome"] == outcome, context.outcome_runs[outcome].stdout
+
+
+# --- The command line lists every command it accepts (add-user-documentation 4.1) ---
+
+
+@given("the command line")
+def step_impl(context):
+    pass
+
+
+@when("its usage is requested")
+def step_impl(context):
+    context.listed_commands = context.command_line.listed_commands()
+
+
+@then("every command the command line recognises is listed")
+def step_impl(context):
+    from pages.docs import SPEC_COMMANDS
+
+    assert context.listed_commands == SPEC_COMMANDS, (
+        "listed %s, specified %s" % (sorted(context.listed_commands), sorted(SPEC_COMMANDS))
+    )
+
+
+@when("each is requested for its help")
+def step_impl(context):
+    context.rejected = sorted(c for c in context.listed_commands if not context.command_line.recognises(c))
+
+
+@then("none is rejected as an unknown command")
+def step_impl(context):
+    assert not context.rejected, context.rejected

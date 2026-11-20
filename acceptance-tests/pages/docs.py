@@ -191,3 +191,150 @@ class DocsPage:
     def adoption_level_entries(self):
         """Level -> the concepts-page section describing it (None if absent)."""
         return {lvl: self.section("concepts", lvl) for lvl in ADOPTION_LEVELS}
+
+    # --- checked against the product (design D2) ---
+
+    def bootstrap_scripts(self, name):
+        return sorted(set(_BOOTSTRAP.findall(self.text(name))))
+
+    def documented_commands(self):
+        out = set()
+        for h in self.headings("cli reference"):
+            m = re.match(r"`cloudbox ([\w-]+)`", h.strip())
+            if m:
+                out.add(m.group(1))
+        return out
+
+    def documented_exit_statuses(self):
+        """outcome -> exit status, from the reference's exit-status table."""
+        table = self.section("cli reference", "exit statuses") or ""
+        out = {}
+        for line in table.splitlines():
+            cells = [c.strip().strip("`") for c in line.strip().strip("|").split("|")]
+            if len(cells) >= 2 and cells[0].isdigit():
+                out[cells[1].lower()] = int(cells[0])
+        return out
+
+    def example_commands(self, name):
+        """Each `cloudbox ...` line in the page's fenced sh blocks, as argv."""
+        out = []
+        for block in _fenced(self.text(name), "sh"):
+            for line in block.splitlines():
+                line = line.split("#", 1)[0].strip()
+                if line.startswith("cloudbox "):
+                    out.append(line.split()[1:])
+        return out
+
+    def json_examples(self, text):
+        return _fenced(text, "json")
+
+    def stage_sections(self, name):
+        heads = [h.lower() for h in self.headings(name)]
+        return {stage: any(stage in h for h in heads) for stage in LOOP_STAGES}
+
+    def contains_verbatim(self, name, phrase):
+        return _norm(phrase) in _norm(self.text(name))
+
+    def outcome_entry(self, outcome):
+        return _section_body(self.text("troubleshooting"), OUTCOMES[outcome])
+
+
+# --- product-checked facts (design D2) -----------------------------------------
+
+import subprocess as _subprocess
+
+# The commands the specs require of the command line (design D4).
+SPEC_COMMANDS = {
+    "check", "cluster", "app", "sandbox", "apply", "test", "status", "evidence",
+    "logs", "exec", "port-forward", "server", "version",
+}
+GLOBAL_OPTIONS = {"--server", "--as", "-o", "--output"}
+LOOP_STAGES = ["declare", "create", "apply", "test", "explain", "amend", "evidence", "destroy"]
+
+# Troubleshooting outcome (spec Examples) -> its entry's heading phrase.
+OUTCOMES = {
+    "a cluster refused for unproven enforcement": "unproven network policy enforcement",
+    "an operation refused for a missing integration": "no integration configured",
+    "an egress proxy reported unavailable": "egress proxy unavailable",
+    "substrate parity reported unverified": "substrate parity unverified",
+    "an unreachable control plane": "control plane unreachable",
+}
+
+_UNREACHABLE = "http://127.0.0.1:1"
+_BOOTSTRAP = re.compile(r"(?<![\w/.-])((?:\.?/)?scripts/[\w./-]+\.sh)")
+
+
+def _norm(text):
+    return " ".join(text.split()).lower()
+
+
+class CommandLine:
+    """The binary as the authority for what the CLI reference and agent guide
+    may claim."""
+
+    def __init__(self, cli_path):
+        self._cli = cli_path
+
+    def run(self, *args, server=_UNREACHABLE):
+        cmd = [self._cli]
+        if server:
+            cmd += ["--server", server]
+        return _subprocess.run(cmd + list(args), capture_output=True, text=True, timeout=60)
+
+    def listed_commands(self):
+        usage = _subprocess.run([self._cli], capture_output=True, text=True).stderr
+        block = usage.split("Commands:", 1)[1] if "Commands:" in usage else ""
+        names = set()
+        for line in block.splitlines():
+            if not line.startswith("  ") or not line.strip():
+                if names:
+                    break
+                continue
+            names.add(line.split()[0])
+        return names
+
+    def usage_of(self, command):
+        """The command's own usage text (run without flags)."""
+        out = self.run(command)
+        return out.stdout + out.stderr
+
+    def recognises(self, command):
+        return "unknown command" not in self.usage_of(command)
+
+
+def _section_body(text, heading_phrase):
+    lines = text.splitlines()
+    start = level = None
+    for i, line in enumerate(lines):
+        m = _HEADING.match(line)
+        if not m:
+            continue
+        if start is None and heading_phrase.lower() in m.group(2).lower():
+            start, level = i, len(m.group(1))
+        elif start is not None and len(m.group(1)) <= level:
+            return "\n".join(lines[start:i])
+    return "\n".join(lines[start:]) if start is not None else None
+
+
+def _fenced(text, lang):
+    blocks, current, inside = [], [], False
+    for line in text.splitlines():
+        if line.startswith("```"):
+            if inside:
+                blocks.append("\n".join(current))
+                current, inside = [], False
+            elif line.strip() == "```" + lang:
+                inside = True
+            continue
+        if inside:
+            current.append(line)
+    return blocks
+
+
+
+FACTS.update({
+    "registration refusal": ["unproven network policy enforcement"],
+    "registration remedy": ["install a cni that enforces networkpolicy"],
+    "means": ["**what it means.**"],
+    "remedy": ["**what to do.**"],
+})
