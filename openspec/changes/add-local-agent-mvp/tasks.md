@@ -69,7 +69,7 @@ that simulates.
 
 ## 5. Completion
 
-- [ ] 5.1 Resolve design Open Question 4: decide which of this change's rules belong in the `@conformance` subset — registration-time enforcement refusal (2.1) is the strongest candidate, since CI already stands up a deliberately non-enforcing cluster. Tag accordingly and add matching rows to `acceptance-tests/CONFORMANCE.md`, keeping its recorded-exclusion table accurate
+- [x] 5.1 Resolve design Open Question 4: decide which of this change's rules belong in the `@conformance` subset — registration-time enforcement refusal (2.1) is the strongest candidate, since CI already stands up a deliberately non-enforcing cluster. Tag accordingly and add matching rows to `acceptance-tests/CONFORMANCE.md`, keeping its recorded-exclusion table accurate
 - [ ] 5.2 Default run green: `make acceptance` passes with zero pending or undefined steps, and no conformance-tagged scenario is attempted or reported as a failure
 - [ ] 5.3 Conformance run green: `make conformance` passes against Kind with an enforcing CNI, and the enforcement gate still refuses the non-enforcing cluster in both directions
 - [ ] 5.4 Frozen-contract and boundary check: `internal/cluster/cluster.go` is byte-identical to its pre-change state, every `/simctl/*` route is still unreachable under `--driver kube`, and `cmd/cloudbox/` imports no `internal/core` package

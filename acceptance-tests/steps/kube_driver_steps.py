@@ -670,3 +670,36 @@ def step_impl(context):
         if r.status_code != 404
     ]
     assert not served, "simulation arrangement routes served under kube: %s" % served
+
+
+# --- Rule: An egress proxy that cannot be pulled leaves allowlisted egress denied ---
+
+UNPULLABLE_PROXY_IMAGE = "ghcr.io/nvcnvn/cloudbox-egress-proxy@sha256:" + "0" * 64
+
+
+@when("its egress proxy is redeployed from an image the cluster cannot pull")
+def step_impl(context):
+    context.kube.redeploy_proxy_unpullable(context.sandbox_name, UNPULLABLE_PROXY_IMAGE)
+    # The proxy's progress deadline is 60s; the record reconciles on read.
+    deadline = time.time() + 180
+    while time.time() < deadline:
+        record = context.sandboxes.record(context.sandbox_name).json()
+        if (record.get("egressProxy") or {}).get("state") == "unavailable":
+            break
+        time.sleep(5)
+    context.sandbox_record = record
+
+
+@then("the sandbox reports the egress proxy unavailable naming that image")
+def step_impl(context):
+    proxy = context.sandbox_record.get("egressProxy") or {}
+    assert proxy.get("state") == "unavailable", proxy
+    assert UNPULLABLE_PROXY_IMAGE in proxy.get("reason", ""), proxy
+
+
+@then("a workload's request to the declared endpoint fails")
+def step_impl(context):
+    context.bundles.apply(context.app_name, context.sandbox_name, ALLOWED_EGRESS_YAML)
+    context.bundles.last_response.raise_for_status()
+    logs = wait_for_log_markers(context, "fetcher", ["FETCH:"])
+    assert "FETCH:OK" not in logs, "the declared endpoint was reached with no proxy:\n%s" % logs

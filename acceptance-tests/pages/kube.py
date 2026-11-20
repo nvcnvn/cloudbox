@@ -250,6 +250,19 @@ class KubeClusterPage:
         """How many attempts the proxy's retention bound discarded."""
         return self.proxy_attempt_record(namespace)["dropped"]
 
+    def redeploy_proxy_unpullable(self, namespace, image):
+        """Point the namespace's egress proxy at an image the cluster cannot
+        pull. Recreate strategy, so the old pod does not keep serving while the
+        new one fails — exactly an unresolvable release reference."""
+        patch = (
+            '{"spec":{"strategy":{"type":"Recreate","rollingUpdate":null},'
+            '"template":{"spec":{"containers":[{"name":"proxy","image":"%s","imagePullPolicy":"Always"}]}}}}'
+            % image
+        )
+        result = self._kubectl("-n", namespace, "patch", "deployment", "cloudbox-egress-proxy",
+                               "--type", "strategic", "-p", patch)
+        assert result.returncode == 0, result.stderr
+
     def restart_egress_proxy(self, namespace):
         """Delete the namespace's egress proxy pod and wait for its
         replacement to be ready — a real restart, losing whatever the process
