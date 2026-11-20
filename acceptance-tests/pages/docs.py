@@ -43,6 +43,11 @@ FACTS = {
         "is a trust boundary",
         "isolates users from each other",
     ],
+    "enforcing cni": [
+        "cni enforces networkpolicy",
+        "cni that enforces networkpolicy",
+        "networkpolicy-enforcing cni",
+    ],
     "evidence lost on stop": [
         "evidence is lost when the local control plane stops",
     ],

@@ -222,3 +222,19 @@ def step_impl(context):
 def step_impl(context):
     assert context.attempt["allowed"] is False, context.attempt
     assert context.attempt.get("via") != "unfiltered", context.attempt
+
+
+# --- The release declares its required substrate and the trust it does not provide (task 4.5) ---
+
+
+@given("the release's published quickstart")
+def step_impl(context):
+    assert context.docs.exists("quickstart"), "there is no published quickstart"
+    context.doc_under_review = "quickstart"
+
+
+@then("it names a NetworkPolicy-enforcing CNI as a requirement of the target cluster")
+def step_impl(context):
+    requirements = context.docs.section("quickstart", "what you need")
+    assert requirements, "the quickstart has no requirements section"
+    assert context.docs.states(requirements, "enforcing cni"), requirements
