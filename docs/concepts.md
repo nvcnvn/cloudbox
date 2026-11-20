@@ -42,9 +42,12 @@ change the declaration. Nothing is ever allowed on the fly.
 
 ### Allowlist proposal
 
-When a workload is denied egress, CloudBox records the attempt: the
-destination, the time, and the workload. Explaining a sandbox's status turns
-those records into a ready-to-submit allowlist change for someone to review.
+When a workload's request through the egress proxy is denied, CloudBox
+records the attempt: the destination, the time, and the workload. Egress that
+never reaches the proxy, such as a direct connection or a non-HTTP protocol,
+is denied without its destination being recorded. The record is a floor, not
+a complete account. Explaining a sandbox's status turns the recorded attempts
+into a ready-to-submit allowlist change for someone to review.
 Accepting the proposal is a declaration change. The proposal itself allows
 nothing.
 

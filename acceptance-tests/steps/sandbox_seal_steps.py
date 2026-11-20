@@ -374,3 +374,31 @@ def step_impl(context):
 @then('the word "unbypassable" appears nowhere in the claim')
 def step_impl(context):
     assert "unbypassable" not in context.containment_text
+
+# --- Containment names its destination-recording limit (add-local-agent-mvp 1.6) ---
+
+
+def _recording_limits(context):
+    limits = context.containment.get("recordingLimits") or []
+    assert limits, "the containment statement names no recording limit: %s" % context.containment
+    return " ".join(limits).lower()
+
+
+@then("egress that reaches the product's proxy is described as recorded by destination")
+def step_impl(context):
+    limits = _recording_limits(context)
+    assert "proxy" in limits and "recorded by destination" in limits, limits
+
+
+@then("egress that does not reach the proxy is described as denied without a recorded destination")
+def step_impl(context):
+    limits = _recording_limits(context)
+    assert "without its destination being recorded" in limits, limits
+
+
+@then("the blocked-attempt record is not presented as a complete account of denied egress")
+def step_impl(context):
+    limits = _recording_limits(context)
+    assert "not a complete account" in limits, limits
+    # Nothing else in the statement may claim every denial is recorded.
+    assert "denied and recorded" not in context.containment_text, context.containment_text

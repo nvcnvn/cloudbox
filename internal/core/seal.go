@@ -74,13 +74,14 @@ type ContainmentStatement struct {
 	Cooperative      string   `json:"cooperative"`
 	BlockedChannels  []string `json:"blockedChannels"`
 	ResidualChannels []string `json:"residualChannels"`
+	RecordingLimits  []string `json:"recordingLimits"`
 	RoadmapV1x       []string `json:"roadmapV1x"`
 }
 
 // Containment returns the product's published containment statement (§2.5).
 func (c *Core) Containment() ContainmentStatement {
 	return ContainmentStatement{
-		Cooperative: "closed-world reproducibility: any egress not on the allowlist is denied and recorded; " +
+		Cooperative: "closed-world reproducibility: any egress not on the allowlist is denied (which denials are recorded by destination is stated under recordingLimits); " +
 			"a workload that ran correctly sealed exercised zero undeclared external dependencies on the paths it ran",
 		BlockedChannels: []string{
 			"all direct egress, including IP-literal connections (default-deny NetworkPolicy admits only cluster DNS and the egress proxy)",
@@ -91,6 +92,15 @@ func (c *Core) Containment() ContainmentStatement {
 		ResidualChannels: []string{
 			"low-bandwidth exfiltration through DNS queries to cluster DNS (tunneling)",
 			"exfiltration through allowlisted endpoints (the seal proves where traffic went, not what it carried)",
+		},
+		// The recording guarantee is weaker than the blocking one, and the
+		// statement says so (design D6, divergence 4): the blocked-attempt
+		// record is the evidence's egress-violation count, so an operator
+		// must not read a short list as a workload that attempted little.
+		RecordingLimits: []string{
+			"egress from proxy-aware HTTP clients reaches the product's egress proxy, and a denied attempt there is recorded by destination (FQDN), time, and workload",
+			"all other egress — direct connections, IP literals, non-HTTP protocols, and clients that ignore the injected proxy settings — is denied by NetworkPolicy at the CNI without its destination being recorded",
+			"the blocked-attempt record is therefore a floor, not a complete account of the egress the seal denied",
 		},
 		RoadmapV1x: []string{
 			"DNS query logging with per-sandbox rate limits and anomaly detection",
