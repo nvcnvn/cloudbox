@@ -218,12 +218,28 @@ func (c *Cluster) restMapping(apiVersion, kind string) (*schema.GroupVersionReso
 		}
 	}
 	mapping, err := mapper.RESTMapping(schema.GroupKind{Group: gv.Group, Kind: kind}, gv.Version)
-	if err != nil {
-		// Bare kind (GetRaw has no apiVersion): search all groups.
-		mapping, err = mapper.RESTMapping(schema.GroupKind{Kind: kind})
-		if err != nil {
-			return nil, false, err
+	if err != nil && apiVersion == "" {
+		// Bare kind (GetRaw has no apiVersion): the core group was tried
+		// above; now search every discovered group in discovery order, so a
+		// Deployment resolves to apps/v1. An empty GroupKind group means
+		// core only, which is why the lookup above cannot find it.
+		for _, g := range groups {
+			if g.Group.Name == "" {
+				continue
+			}
+			if m, gerr := mapper.RESTMapping(schema.GroupKind{Group: g.Group.Name, Kind: kind}); gerr == nil {
+				mapping, err = m, nil
+				break
+			}
 		}
+	}
+	if err != nil && apiVersion != "" {
+		// An apiVersion the mapper does not know keeps the original
+		// behaviour: try the kind in the core group.
+		mapping, err = mapper.RESTMapping(schema.GroupKind{Kind: kind})
+	}
+	if err != nil {
+		return nil, false, err
 	}
 	namespaced := mapping.Scope.Name() == "namespace"
 	return &mapping.Resource, namespaced, nil
