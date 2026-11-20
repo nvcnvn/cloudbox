@@ -188,12 +188,14 @@ the files and reverting the usage text.
 
 ## Open Questions
 
-1. **Should refusals carry a stable reason identifier?** A field beside
-   `core.Error.Message` would let troubleshooting coverage be checked against
-   the product (as D2 does elsewhere) instead of an enumerated table (D5). It
-   would also give agents something to branch on that is finer than the MVP's
-   exit statuses. It changes the response shape, so it belongs in
-   `developer-ergonomics` and probably its own change.
+1. **Carried forward (2026-11-20): stable refusal reasons are a follow-up, not
+   part of this change.** A `reason` field beside `core.Error.Message` would
+   let troubleshooting coverage be checked against the product (D2) instead
+   of an enumerated table (D5), and would give agents something finer than
+   exit statuses to branch on. It changes every error response's shape, so it
+   belongs in its own `developer-ergonomics` change. Until then, D5's
+   enumerated table stands, and a change that adds a refusal operators can
+   meet must add a troubleshooting row (ADR 0011).
 2. **Resolved (2026-11-20): the documentation is part of the release and gates
    the MVP's completion.** MVP task 5.2 (default run green) waits for this
    change's sections 2–5, and the two changes complete together. Reason: a
@@ -201,6 +203,7 @@ the files and reverting the usage text.
    only in specs has not told its operators what it is. This is the same
    honesty the MVP enforces in code, and MVP task 5.6 (walk the release as a
    stranger) already assumes the pages exist.
-3. **Where does the quickstart live if MVP 4.5 lands before this change?** D1
-   assumes `docs/quickstart.md`. If the MVP places it elsewhere, a task here
-   moves it, and `release-integrity`'s quickstart steps must follow the move.
+3. **Resolved (2026-11-20): the quickstart lives at `docs/quickstart.md`.**
+   MVP task 4.5 placed it there, linked from the documentation index, so no
+   move was needed. `release-integrity`'s quickstart steps read it through the
+   same docs page object.

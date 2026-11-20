@@ -54,7 +54,7 @@ headings (design D7).
 ## 5. Troubleshooting — after MVP 1.4, 2.1, and 4.3
 
 - [x] 5.1 user-documentation: every outcome the release names has a troubleshooting entry — write `docs/troubleshooting.md` with one heading per outcome in the spec's Examples table, each with "What it means" and "What to do" — red → green → commit
-- [ ] 5.2 Record design Open Question 1 (stable refusal reasons) as a follow-up proposal or as an explicit decision not to pursue it; do not implement it in this change
+- [x] 5.2 Record design Open Question 1 (stable refusal reasons) as a follow-up proposal or as an explicit decision not to pursue it; do not implement it in this change
 
 ## 6. Completion
 
