@@ -188,10 +188,23 @@ func New(driver cluster.Driver, now func() time.Time) *Core {
 // RegisterCluster records a cluster's role in the ClusterRegistry (CP3).
 func (c *Core) RegisterCluster(name, role string) error {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-	if _, ok := c.driver.Cluster(name); !ok {
+	host, ok := c.driver.Cluster(name)
+	c.mu.Unlock()
+	if !ok {
 		return errf(404, "cluster %q is not known", name)
 	}
+	// A sandbox host must be shown to enforce NetworkPolicy before it is
+	// accepted (sandbox-lifecycle, design D2): the error belongs where the
+	// decision was made, not at the first sandbox several steps later. The
+	// probe owns its scratch namespaces and runs without holding c.mu — on a
+	// real cluster it takes as long as two canary pods.
+	if role == "sandbox" && !host.ProbeEnforcement() {
+		return errf(422,
+			"cluster %q refused as a sandbox host: unproven network policy enforcement — the enforcement probe found a connection the seal must deny was not denied, so this cluster's CNI does not enforce NetworkPolicy; install a CNI that enforces it (for example Calico) and register again",
+			name)
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	if c.roles[name] == nil {
 		c.roles[name] = map[string]bool{}
 	}

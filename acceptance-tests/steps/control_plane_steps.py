@@ -134,6 +134,9 @@ def step_impl(context):
         context.platform.run_setup(name).raise_for_status()
         context.platform.set_components(name, BASE_COMPONENTS)
     context.platform.register_cluster("prod-cluster", "production")
+    # The shared topology hosts sandboxes on the production cluster, so it is
+    # registered in both roles; a sandbox host is always a registered one.
+    context.platform.register_cluster("prod-cluster", "sandbox")
     context.platform.register_cluster("sbx-cluster", "sandbox")
     context.applications.create("shared-app", sandboxCluster="prod-cluster")
     context.applications.create("split-app", sandboxCluster="sbx-cluster")

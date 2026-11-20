@@ -448,3 +448,38 @@ def step_impl(context):
 def step_impl(context):
     evidence = context.sandboxes.evidence(context.sandbox_name)
     assert "HorizontalPodAutoscaler/web-hpa" in (evidence.get("autoscalersSuspended") or []), evidence
+
+# --- A sandbox host that cannot be shown to enforce is refused (add-local-agent-mvp 2.1) ---
+
+
+@given("a cluster whose CNI does not enforce NetworkPolicy")
+def step_impl(context):
+    context.candidate_cluster = context.platform.ensure_cluster("unenforced-host", enforcing=False)
+
+
+@when("it is registered as a sandbox host")
+def step_impl(context):
+    context.registration = context.platform.try_register_sandbox_host(context.candidate_cluster)
+
+
+@then("the registration is refused naming unproven network policy enforcement")
+def step_impl(context):
+    resp = context.registration
+    assert not resp.ok, "a host that cannot show enforcement was accepted"
+    assert "unproven network policy enforcement" in resp.json().get("error", ""), resp.text
+
+
+@then("no sandbox can be created on it")
+def step_impl(context):
+    import uuid
+
+    app = "pinned-%s" % uuid.uuid4().hex[:6]
+    context.applications.create(app, sandboxCluster=context.candidate_cluster)
+    context.sandboxes.create(app, arrange=False, expect_ok=False)
+    resp = context.sandboxes.last_response
+    assert not resp.ok, "a sandbox was created on a refused host: %s" % resp.text
+
+
+@then("the registration is accepted")
+def step_impl(context):
+    assert context.registration.ok, context.registration.text

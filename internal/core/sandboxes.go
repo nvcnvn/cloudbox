@@ -97,14 +97,22 @@ type Sandbox struct {
 }
 
 // sandboxHost picks the cluster new sandboxes land on: the application's
-// pinned cluster if set (CP3), else a registered sandbox cluster, else any
-// cluster where setup ran. Callers hold c.mu.
+// pinned cluster if set (CP3), else a registered sandbox cluster. Either way
+// it must be a registered sandbox host — registration is where enforcement is
+// proven, so neither a pin nor a fallback may route around it
+// (sandbox-lifecycle). Callers hold c.mu.
 func (c *Core) sandboxHost(app *Application) (cluster.Cluster, error) {
 	if app != nil && app.SandboxCluster != "" {
-		if cl, ok := c.driver.Cluster(app.SandboxCluster); ok {
-			return cl, nil
+		cl, ok := c.driver.Cluster(app.SandboxCluster)
+		if !ok {
+			return nil, errf(404, "application sandbox cluster %q is not known", app.SandboxCluster)
 		}
-		return nil, errf(404, "application sandbox cluster %q is not known", app.SandboxCluster)
+		if !c.roles[app.SandboxCluster]["sandbox"] {
+			return nil, errf(409,
+				"application sandbox cluster %q is not a registered sandbox host: register it as a sandbox host first (registration proves it enforces NetworkPolicy)",
+				app.SandboxCluster)
+		}
+		return cl, nil
 	}
 	for name, roles := range c.roles {
 		if roles["sandbox"] {
@@ -113,12 +121,7 @@ func (c *Core) sandboxHost(app *Application) (cluster.Cluster, error) {
 			}
 		}
 	}
-	for name := range c.installed {
-		if cl, ok := c.driver.Cluster(name); ok {
-			return cl, nil
-		}
-	}
-	return nil, errf(409, "no cluster available: run setup on a cluster first")
+	return nil, errf(409, "no sandbox host is registered: register a cluster that enforces NetworkPolicy as a sandbox host first")
 }
 
 // CreateSandboxOptions vary one creation.

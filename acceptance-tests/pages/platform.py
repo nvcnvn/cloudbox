@@ -41,6 +41,17 @@ class PlatformPage:
         resp.raise_for_status()
         return resp
 
+    def try_register_sandbox_host(self, cluster):
+        """Registration as a sandbox host, returned rather than raised: it is
+        refused when the cluster cannot be shown to enforce NetworkPolicy."""
+        return self._api.post("/v1/clusters/register", json={"cluster": cluster, "role": "sandbox"}, timeout=300)
+
+    def stop_enforcing(self, cluster):
+        """Sim-only: the cluster's CNI stops enforcing after registration (a
+        CNI replaced underneath the control plane). A real CI cluster cannot
+        do this mid-run; see internal/sim/DIVERGENCES.md."""
+        self._api.post("/simctl/clusters/%s/enforcement" % cluster, json={"enforcing": False}).raise_for_status()
+
     def ensure_ready_platform(self, name="main", enforcing=True):
         """One installed cluster registered as both sandbox host and
         production — the shared-cluster topology (CP3)."""

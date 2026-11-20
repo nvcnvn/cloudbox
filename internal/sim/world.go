@@ -288,3 +288,12 @@ func (c *SimCluster) Workloads(namespace string) []cluster.Workload {
 	}
 	return append([]cluster.Workload{}, ns.workloads...)
 }
+
+// SetEnforcing is sim-only arrangement: the cluster's CNI starts or stops
+// enforcing NetworkPolicy after the fact, e.g. replaced underneath a
+// registered host. Not on the cluster contract (ADR 0008).
+func (c *SimCluster) SetEnforcing(enforcing bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.enforcesNetPol = enforcing
+}

@@ -90,6 +90,7 @@ func (s *Server) simRoutes() {
 	s.mux.HandleFunc("POST /simctl/databases/{app}/{datastore}", s.simSeedDatabase)
 	s.mux.HandleFunc("POST /simctl/fail-migration", s.simFailMigration)
 	s.mux.HandleFunc("POST /simctl/integrations", s.simIntegrations)
+	s.mux.HandleFunc("POST /simctl/clusters/{cluster}/enforcement", s.simSetEnforcement)
 }
 
 func (s *Server) v1Routes() {
@@ -912,4 +913,21 @@ func (s *Server) simIntegrations(w http.ResponseWriter, r *http.Request) {
 	}
 	s.core.SetIntegrations(in)
 	writeJSON(w, 200, in)
+}
+
+func (s *Server) simSetEnforcement(w http.ResponseWriter, r *http.Request) {
+	req, ok := decode[struct {
+		Enforcing bool `json:"enforcing"`
+	}](w, r)
+	if !ok {
+		return
+	}
+	cl, found := s.world.Cluster(r.PathValue("cluster"))
+	sc, isSim := cl.(*sim.SimCluster)
+	if !found || !isSim {
+		writeJSON(w, 404, map[string]string{"error": "cluster not known"})
+		return
+	}
+	sc.SetEnforcing(req.Enforcing)
+	writeJSON(w, 200, map[string]bool{"enforcing": req.Enforcing})
 }

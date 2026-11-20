@@ -291,13 +291,19 @@ def step_impl(context):
 
 @given("a cluster whose CNI accepts but does not enforce NetworkPolicy")
 def step_impl(context):
-    context.platform.ensure_ready_platform(enforcing=False)
+    # Registration refuses a non-enforcing host, so the sandbox-creation probe
+    # (N7) is the last line for a host whose CNI stopped enforcing after it
+    # was registered.
+    context.platform.ensure_ready_platform(enforcing=True)
+    context.platform.stop_enforcing("main")
     context.app_name = context.applications.create("web")["name"]
 
 
 @when("setup or sandbox creation runs the enforcement probe")
 def step_impl(context):
-    context.sandbox_name = context.sandboxes.create(context.app_name)
+    # arrange=False: the host is already registered; re-registering it now
+    # would be refused, since its CNI stopped enforcing.
+    context.sandbox_name = context.sandboxes.create(context.app_name, arrange=False)
 
 
 @then("the probe detects that a denied connection was not denied")
@@ -322,6 +328,7 @@ def step_impl(context):
 @given("a cluster whose CNI enforces NetworkPolicy")
 def step_impl(context):
     context.platform.ensure_ready_platform(enforcing=True)
+    context.candidate_cluster = "main"
     context.app_name = context.applications.create("web")["name"]
 
 
