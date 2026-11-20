@@ -48,7 +48,7 @@ that simulates.
 - [x] 2.3 sandbox-lifecycle: user-controlled clusters are registrable sandbox hosts — register a user-controlled cluster as a host, mark its sandboxes' evidence user-controlled, and refuse checks and promotions from that evidence (ADR 0004). Seal and iteration semantics MUST be identical to a managed host — red → green → commit
 - [x] 2.4 Retire the removed rule's code path: delete `provisionLocalCluster`'s off-contract `NewCluster` type assertion in `internal/core/substrate.go:208` and the `CreateSandboxOptions.Local` provisioning branch in `internal/core/sandboxes.go:150`. The user-controlled *property* survives on the registered-host path; only the product-provisions-Kind mechanism goes
 - [x] 2.5 Promote `hack/conformance/kind-enforcing.sh` to a user-facing bootstrap outside the conformance directory, so the documented path to a suitable cluster is a supported script rather than a test fixture. It stays outside the product boundary (ADR 0010)
-- [ ] 2.6 Reconcile the sim: the sim driver's `NewCluster(name, enforcing, userControlled)` is how the suite arranges enforcing and non-enforcing hosts. Confirm registration-time refusal behaves identically on both drivers, and record any divergence in `internal/sim/DIVERGENCES.md` (conformance-ci, ADR 0008)
+- [x] 2.6 Reconcile the sim: the sim driver's `NewCluster(name, enforcing, userControlled)` is how the suite arranges enforcing and non-enforcing hosts. Confirm registration-time refusal behaves identically on both drivers, and record any divergence in `internal/sim/DIVERGENCES.md` (conformance-ci, ADR 0008)
 
 ## 3. The command line becomes the product
 
@@ -71,7 +71,7 @@ that simulates.
 
 - [x] 5.1 Resolve design Open Question 4: decide which of this change's rules belong in the `@conformance` subset — registration-time enforcement refusal (2.1) is the strongest candidate, since CI already stands up a deliberately non-enforcing cluster. Tag accordingly and add matching rows to `acceptance-tests/CONFORMANCE.md`, keeping its recorded-exclusion table accurate
 - [x] 5.2 Default run green: `make acceptance` passes with zero pending or undefined steps, and no conformance-tagged scenario is attempted or reported as a failure
-- [ ] 5.3 Conformance run green: `make conformance` passes against Kind with an enforcing CNI, and the enforcement gate still refuses the non-enforcing cluster in both directions
+- [x] 5.3 Conformance run green: `make conformance` passes against Kind with an enforcing CNI, and the enforcement gate still refuses the non-enforcing cluster in both directions
 - [x] 5.4 Frozen-contract and boundary check: `internal/cluster/cluster.go` is byte-identical to its pre-change state, every `/simctl/*` route is still unreachable under `--driver kube`, and `cmd/cloudbox/` imports no `internal/core` package
 - [x] 5.5 Verify the composition: `.extracted/` rebuilt, nothing loaded from `openspec/changes/archive/`, no duplicate scenarios between this change's deltas and their source-of-truth specs, composition report clean
 - [ ] 5.6 Walk the release as a stranger would: from a machine with no cluster, follow the quickstart verbatim through the whole loop to signed evidence. Every step that required knowledge not in the quickstart is a defect in the quickstart, not in the walker
