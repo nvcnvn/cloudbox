@@ -41,10 +41,13 @@ Feature: Developer ergonomics changes
         | a control plane with no source-control integration | an agent posts an evidence check          | integration-missing  |
         | a bundle with a manifest outside its contract     | an agent applies it to a sandbox          | bundle-rejected      |
 
-      @conformance
-      Examples: On a real cluster that does not enforce NetworkPolicy
-        | situation                                         | request                                   | reason               |
-        | a cluster whose CNI does not enforce NetworkPolicy | an operator registers it as a sandbox host | enforcement-unproven |
+    @conformance
+    Scenario: A real cluster that cannot show enforcement is refused for that reason
+      Given a cluster whose CNI does not enforce NetworkPolicy
+      When an operator registers it as a sandbox host
+      Then the request is refused
+      And the refusal's reason is "enforcement-unproven"
+      And the reason is one the refusal-reason catalog lists
 
     Scenario: The offline check names the same reason as the control plane
       Given a bundle with a manifest outside its contract
