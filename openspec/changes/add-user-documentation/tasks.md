@@ -61,4 +61,4 @@ headings (design D7).
 - [x] 6.1 Default run green: `make acceptance` passes with zero pending or undefined steps from this change, and no scenario here is tagged `@conformance`
 - [x] 6.2 Verify the composition: `.extracted/` rebuilt, `make lint-specs` clean, no duplicate scenarios between this change's `developer-ergonomics` delta and its source-of-truth spec
 - [x] 6.3 Boundary check: `internal/cluster/cluster.go` unchanged, and `cmd/cloudbox/` imports no `internal/core` package
-- [ ] 6.4 Walk the documentation as a stranger would: starting from the repository README with no prior knowledge, reach a sealed sandbox, read a blocked attempt, and find the remedy for a refused registration using only `docs/`. Every point where knowledge outside the docs was needed is a defect in the docs (design D3's clarity check)
+- [x] 6.4 Walk the documentation as a stranger would: starting from the repository README with no prior knowledge, reach a sealed sandbox, read a blocked attempt, and find the remedy for a refused registration using only `docs/`. Every point where knowledge outside the docs was needed is a defect in the docs (design D3's clarity check)

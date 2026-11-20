@@ -74,4 +74,4 @@ that simulates.
 - [x] 5.3 Conformance run green: `make conformance` passes against Kind with an enforcing CNI, and the enforcement gate still refuses the non-enforcing cluster in both directions
 - [x] 5.4 Frozen-contract and boundary check: `internal/cluster/cluster.go` is byte-identical to its pre-change state, every `/simctl/*` route is still unreachable under `--driver kube`, and `cmd/cloudbox/` imports no `internal/core` package
 - [x] 5.5 Verify the composition: `.extracted/` rebuilt, nothing loaded from `openspec/changes/archive/`, no duplicate scenarios between this change's deltas and their source-of-truth specs, composition report clean
-- [ ] 5.6 Walk the release as a stranger would: from a machine with no cluster, follow the quickstart verbatim through the whole loop to signed evidence. Every step that required knowledge not in the quickstart is a defect in the quickstart, not in the walker
+- [x] 5.6 Walk the release as a stranger would: from a machine with no cluster, follow the quickstart verbatim through the whole loop to signed evidence. Every step that required knowledge not in the quickstart is a defect in the quickstart, not in the walker
