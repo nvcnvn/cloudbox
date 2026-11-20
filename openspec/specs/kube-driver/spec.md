@@ -78,18 +78,17 @@ Feature: Kube driver
 
   Rule: A non-enforcing CNI fails the probe and never yields a sealed sandbox
     On a cluster whose CNI accepts NetworkPolicy objects without enforcing
-    them, the enforcement probe MUST fail, the sandbox MUST NOT be reported
-    sealed, and no evidence MUST be emitted for it. The control plane MUST
-    report the cause as unenforced network policy rather than a generic
-    failure.
+    them, the enforcement probe MUST fail and no sandbox on that cluster MUST
+    be reported sealed or emit evidence. Because registration probes the
+    candidate cluster, such a cluster MUST be refused as a sandbox host, and
+    no sandbox MUST be created on it. The control plane MUST report the cause
+    as unenforced network policy rather than a generic failure.
 
     Scenario: A cluster that accepts but ignores NetworkPolicy is caught
       Given a real cluster whose CNI accepts NetworkPolicy objects without enforcing them
-      When a sandbox is created on that cluster
-      Then the enforcement probe fails
-      And the sandbox is not reported sealed
-      And no evidence is emitted for that sandbox
-      And the reported cause names unenforced network policy
+      When it is registered as a sandbox host
+      Then the registration is refused naming unproven network policy enforcement
+      And no sandbox can be created on it
 
   Rule: Real workload readiness and squeeze failure are observed, not simulated
     The driver MUST report a real workload's readiness from the cluster's own
@@ -126,4 +125,90 @@ Feature: Kube driver
       Given cloudboxd running against a real cluster
       When a simulation arrangement route is requested
       Then the request is not served
+
+  Rule: Egress evaluation reflects live cluster state
+    The driver MUST evaluate a connection attempt against what the cluster
+    actually enforces for that namespace — its seal and its live allowlist —
+    and MUST NOT report an attempt it did not evaluate as allowed. An
+    unevaluated default of "allowed, unfiltered" is a false containment claim.
+
+    Scenario: An allowlisted destination evaluates as proxy-mediated
+      Given a sealed sandbox on a real cluster whose allowlist declares one external endpoint
+      When the driver evaluates an attempt to that declared endpoint
+      Then the attempt is reported allowed through the egress proxy
+
+    Scenario: An undeclared destination evaluates as denied
+      Given a sealed sandbox on a real cluster
+      And "api.other-vendor.com" is not on the application allowlist
+      When the driver evaluates an attempt to "api.other-vendor.com"
+      Then the attempt is reported denied
+
+    Scenario: An unsealed namespace is never reported as filtered
+      Given a namespace on a real cluster that carries no seal
+      When the driver evaluates an attempt from that namespace
+      Then the attempt is reported unfiltered rather than proxy-mediated
+
+  Rule: Attempt collection does not depend on a sandbox being inspected
+    The control plane MUST collect the egress proxy's attempt records
+    independently of whether anyone reads the sandbox, so that a proxy which
+    restarts before the first inspection does not take uncollected records with
+    it.
+
+    Scenario: A blocked attempt survives a proxy restart before any inspection
+      Given a sealed sandbox on a real cluster running a workload
+      And the workload has attempted a destination outside the allowlist
+      When the egress proxy restarts before the sandbox is inspected
+      Then the blocked attempt is still recorded with its destination and attribution
+
+  Rule: The proxy's attempt record is bounded and its truncation is reported
+    The egress proxy MUST bound how many attempts it retains, so that a
+    long-running sandbox cannot exhaust its memory and lose every record. When
+    the bound discards attempts, the number discarded MUST be reported; a
+    silently truncated record presented as a complete one is a false count.
+
+    Scenario: Attempts beyond the retention bound are discarded with a reported count
+      Given a sealed sandbox on a real cluster whose workload makes more blocked attempts than the proxy retains
+      When the control plane collects the proxy's records
+      Then the retained attempts are recorded
+      And the number of discarded attempts is reported
+
+  Rule: Unrecoverable record loss is surfaced, never absorbed
+    When attempt records are lost — the proxy restarted with records
+    uncollected, or its bound discarded them — the sandbox status and the run's
+    evidence MUST state that the egress record is incomplete. A reduced
+    violation count MUST NOT be presented as a complete one.
+
+    Scenario: A sandbox whose records were lost reports an incomplete egress record
+      Given a sealed sandbox on a real cluster whose egress proxy lost uncollected records
+      When the sandbox status is inspected
+      Then the egress record is reported incomplete
+
+    Scenario: Evidence carries the incompleteness rather than a diminished count
+      Given a sandbox run whose egress record is incomplete
+      When the control plane assembles the run's evidence
+      Then the evidence states that the egress-violation count is incomplete
+
+  Rule: The proxy's attempt surface is reachable only by the control plane
+    The egress proxy's attempt surface MUST NOT be readable from outside the
+    control plane's collection path. A workload elsewhere on the cluster MUST
+    NOT be able to read which destinations a sandbox attempted.
+
+    Scenario: A pod outside the sandbox cannot read its attempt records
+      Given a sealed sandbox on a real cluster with recorded egress attempts
+      When a workload in an unsealed namespace requests that sandbox's attempt surface
+      Then the request is refused
+      And the control plane's own collection still returns the records
+
+  Rule: An egress proxy that cannot be pulled leaves allowlisted egress denied on a real cluster
+    When a sealed namespace's egress proxy cannot be pulled, the driver MUST
+    let the control plane report it unavailable, naming the image, within the
+    proxy's progress deadline, and a real workload's request to an allowlisted
+    destination MUST fail rather than leave the namespace unmediated.
+
+    Scenario: An unpullable proxy image is reported and allowlisted egress fails closed
+      Given a sealed sandbox on a real cluster whose allowlist declares one external endpoint
+      When its egress proxy is redeployed from an image the cluster cannot pull
+      Then the sandbox reports the egress proxy unavailable naming that image
+      And the sandbox is not reported as enforcing its allowlist
+      And a workload's request to the declared endpoint fails
 ```

@@ -62,4 +62,56 @@ Feature: Developer ergonomics
       When the team works a pull request from open to merge
       Then only the check, apply, status, and test verbs and the SCM integration are involved
       And no promotion, approval, or rejection verb is required
+
+  Rule: At the sandbox level the command line carries the whole loop
+    Where no source-control integration is configured, every step of the
+    sealed-iteration loop MUST be reachable from the command line: declaring
+    an application and its contract, creating a sandbox, applying a bundle,
+    running the declared suite, reading status and evidence, and destroying
+    the sandbox. No step MAY require a caller to address the control plane's
+    interface directly.
+
+    Scenario: An agent completes the sealed loop using only the command line
+      Given a registered sandbox cluster and no source-control integration
+      When an agent declares an application, creates a sandbox, applies a bundle, runs the declared suite, reads the evidence, and destroys the sandbox
+      Then every step is performed through the command line
+      And no step requires addressing the control plane's interface directly
+
+  Rule: Command output is available as data and outcomes carry distinct exit statuses
+    Every command MUST be able to render its result in a machine-readable form
+    carrying the same facts as its human rendering, and MUST distinguish by
+    exit status between success, a request the product refused, and a failure
+    to reach the control plane. A program MUST NOT have to parse prose to
+    learn what happened.
+
+    Scenario: Explain renders blocked attempts and the proposal as data
+      Given a sandbox whose workload was denied egress to two undeclared endpoints
+      When status with the explain option is run in machine-readable mode
+      Then each blocked attempt is rendered as data with destination, timestamp, and attributed workload
+      And the allowlist change proposal is rendered as data alongside them
+
+    Scenario: The machine-readable rendering carries the same facts as the human one
+      Given a sandbox with a recorded blocked egress attempt
+      When status with the explain option is run in both renderings
+      Then the machine-readable rendering carries the same facts as the human rendering
+
+    Scenario: A refusal and an unreachable control plane are distinguishable without reading text
+      Given a command that the control plane refuses and a command issued against an unreachable control plane
+      When each is run
+      Then their exit statuses differ from each other and from a successful run
+
+  Rule: The command line lists every command it accepts
+    The command line's usage MUST list every command it recognises, and MUST
+    NOT list a command it does not recognise, so a program or a reader can
+    learn the whole surface from the binary without external documentation.
+
+    Scenario: The usage lists every recognised command
+      Given the command line
+      When its usage is requested
+      Then every command the command line recognises is listed
+
+    Scenario: The usage lists no command the command line rejects
+      Given the commands the command line lists in its usage
+      When each is requested for its help
+      Then none is rejected as an unknown command
 ```

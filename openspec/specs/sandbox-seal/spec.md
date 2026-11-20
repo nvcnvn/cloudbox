@@ -114,7 +114,10 @@ Feature: Sandbox seal
     Published containment guarantees MUST separate the cooperative guarantee
     from the adversarial one, name the residual channels (DNS tunneling,
     exfiltration through allowlisted endpoints), and MUST NOT claim the seal
-    is unbypassable.
+    is unbypassable. They MUST also name which egress the mechanism records by
+    destination and which it denies without observing one, so that the
+    blocked-attempt record is not read as a complete account of everything the
+    seal stopped.
 
     Scenario: The containment statement declares blocked and residual channels
       Given the product's published containment statement for sealed sandboxes
@@ -122,4 +125,11 @@ Feature: Sandbox seal
       Then direct egress, non-allowlisted FQDNs, ingress, and production writes are listed as blocked
       And DNS tunneling and exfiltration through allowlisted endpoints are listed as residual channels
       And the word "unbypassable" appears nowhere in the claim
+
+    Scenario: The containment statement declares the limit of destination recording
+      Given the product's published containment statement for sealed sandboxes
+      When an operator reviews it
+      Then egress that reaches the product's proxy is described as recorded by destination
+      And egress that does not reach the proxy is described as denied without a recorded destination
+      And the blocked-attempt record is not presented as a complete account of denied egress
 ```
