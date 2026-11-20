@@ -62,4 +62,28 @@ Feature: Control plane
       When the pipeline attempts to post an evidence status check to a pull request
       Then the posted check is not the product's signed evidence check
       And the product's check appears only when the controller posts it through the SCM integration
+
+  Rule: The command line may start and reuse a local control plane
+    The CLI MUST be able to start a control plane on the developer's machine
+    when none is addressed, and MUST reuse it across subsequent commands
+    rather than starting another. Enforcement MUST remain server-side in the
+    started control plane; the CLI MUST NOT acquire validation, bundling, or
+    evidence authority by virtue of having started it.
+
+    Scenario: The first command starts a control plane and later commands reuse it
+      Given a developer machine with no control plane running
+      When two commands requiring the control plane are run in turn
+      Then the first starts a control plane
+      And the second uses the already-running one rather than starting another
+
+    Scenario: A CLI-started control plane enforces exactly as an operated one
+      Given a bundle that server-side intake rejects
+      When it is applied through a CLI-started control plane
+      Then it is rejected on the same grounds as when applied through a separately operated control plane
+
+    Scenario: An addressed control plane is used instead of starting one
+      Given a developer who addresses a running control plane explicitly
+      When they run a command requiring the control plane
+      Then the addressed control plane serves the request
+      And no local control plane is started
 ```

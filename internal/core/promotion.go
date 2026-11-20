@@ -60,6 +60,9 @@ func (c *Core) promotionMode(app *Application) string {
 
 // openPromotionLocked creates a pending promotion request. Callers hold c.mu.
 func (c *Core) openPromotionLocked(app *Application, sandbox, digest, openedBy string, evidence *Evidence, history *HistoryEntry) (*Promotion, error) {
+	if err := c.requireIntegration(c.integrations.GitOps, IntegrationGitOps, "open a promotion"); err != nil {
+		return nil, err
+	}
 	c.promotionSeq++
 	p := &Promotion{
 		ID: fmt.Sprintf("promo-%d", c.promotionSeq), App: app.Name,
@@ -78,6 +81,9 @@ func (c *Core) openPromotionLocked(app *Application, sandbox, digest, openedBy s
 func (c *Core) OpenPromotion(sandboxName, actor string) (*Promotion, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if err := c.requireIntegration(c.integrations.GitOps, IntegrationGitOps, "open a promotion"); err != nil {
+		return nil, err
+	}
 	if err := c.requireManagedLocked(sandboxName, "open a promotion"); err != nil {
 		return nil, err
 	}
@@ -86,6 +92,14 @@ func (c *Core) OpenPromotion(sandboxName, actor string) (*Promotion, error) {
 	ev := c.snapshotEvidence(sb)
 	if !ev.Valid {
 		return nil, errf(409, "promotion blocked: evidence is not valid (%v)", ev.InvalidReasons)
+	}
+	// Valid evidence may still carry unverified parity (it invalidates only on
+	// mismatch, and an admin may override a mismatch); promoting on a
+	// comparison that never happened would read
+	// unverified as a match (substrate-parity, design D4).
+	if ev.SubstrateParity == ParityUnverified {
+		return nil, errf(409,
+			"promotion blocked: substrate parity is %s — no production substrate has been compared", ev.SubstrateParity)
 	}
 	snapshot := *ev
 	return c.openPromotionLocked(app, sandboxName, sb.AppliedDigest, actor, &snapshot, nil)

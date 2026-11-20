@@ -67,3 +67,8 @@ class ApplicationsPage:
         )
         resp.raise_for_status()
         return resp
+
+    def get(self, name):
+        resp = self._api.get("/v1/applications/%s" % name)
+        resp.raise_for_status()
+        return resp.json()

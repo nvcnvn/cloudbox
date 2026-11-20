@@ -22,6 +22,15 @@ def check_enforcement(api, cluster_name):
     """Returns (passed, message). A False verdict's message names unproven
     network policy enforcement and states that no conformance pass is
     reported."""
+    registered = api.post(
+        "/v1/clusters/register", json={"cluster": cluster_name, "role": "sandbox"}, timeout=300,
+    )
+    if not registered.ok:
+        return False, (
+            "conformance run refused: unproven network policy enforcement on "
+            "cluster %r (registration as a sandbox host was refused: %s) — "
+            "no conformance pass is reported" % (cluster_name, registered.json().get("error"))
+        )
     app = "conformance-gate-%s" % uuid.uuid4().hex[:6]
     api.post(
         "/v1/applications",

@@ -1,62 +1,103 @@
 // cloudbox is the thin CLI client (ADR 0004): it creates resources and watches
 // status via the control plane; the one offline exception is `check` (X3).
+// With no control plane addressed it starts a local one and reuses it; it
+// never becomes one.
 package main
 
 import (
 	"fmt"
 	"os"
+
+	"cloudbox/internal/release"
 )
 
-const usage = `cloudbox — sealed, production-shaped sandboxes with signed evidence
+// version identifies the build (release-integrity), stamped by the release
+// process; anything else reports itself as unreleased.
+var version = release.Version
+
+const usage = `cloudbox — sealed, production-shaped sandboxes with honest evidence
 
 Usage:
-  cloudbox <command> [flags]
+  cloudbox [--server <url>] [--as <identity>] [-o json] <command> [flags]
 
-Commands are added as their capability lands; run a command for its own help.
+Commands:
+  check         offline compatibility report for a manifest directory
+  cluster       register a cluster you control as a sandbox host
+  app           declare an application and its contract; amend its allowlist
+  sandbox       create or destroy a sealed sandbox
+  apply         apply manifests to a sandbox
+  test          run the application's declared suite in a sandbox
+  status        sandbox state; --explain lists blocked egress and a proposal
+  evidence      the record of a sandbox's run
+  logs          a workload's logs
+  exec          run a command in a workload
+  port-forward  reach a workload from this machine
+  server        status or stop the local control plane
+  version       the build this binary came from
+
+With no --server, cloudbox starts a local control plane and reuses it.
+Run a command without flags for its own usage.
 `
 
 func main() {
-	if len(os.Args) < 2 {
-		fmt.Fprint(os.Stderr, usage)
-		os.Exit(2)
-	}
-	args := os.Args[1:]
-	// --server names the control plane for online commands; check (X3) never
-	// uses it — it must work with no cluster and no server at all. --as is
-	// the acting identity (a real deployment gets this from login).
-	cl := &client{}
+	os.Exit(run(os.Args[1:]))
+}
+
+func run(args []string) int {
+	// Global flags: --server addresses a control plane (it always wins over
+	// a local one); --as is the identity the request asserts; -o selects
+	// the rendering.
+	c := &client{output: "human", ensure: ensureLocal}
 	for len(args) >= 2 {
-		if args[0] == "--server" {
-			cl.server = args[1]
-			args = args[2:]
-			continue
+		switch args[0] {
+		case "--server":
+			c.server = args[1]
+		case "--as":
+			c.as = args[1]
+		case "-o", "--output":
+			c.output = args[1]
+		default:
+			goto parsed
 		}
-		if args[0] == "--as" {
-			cl.as = args[1]
-			args = args[2:]
-			continue
-		}
-		break
+		args = args[2:]
+	}
+parsed:
+	if c.output != "human" && c.output != "json" {
+		fmt.Fprintf(os.Stderr, "cloudbox: unknown output %q (want human or json)\n", c.output)
+		return exitUsage
 	}
 	if len(args) == 0 {
 		fmt.Fprint(os.Stderr, usage)
-		os.Exit(2)
+		return exitUsage
 	}
 	switch args[0] {
 	case "check":
-		os.Exit(runCheck(args[1:]))
+		return runCheck(args[1:])
+	case "cluster":
+		return runCluster(c, args[1:])
+	case "app":
+		return runApp(c, args[1:])
+	case "sandbox":
+		return runSandbox(c, args[1:])
+	case "apply":
+		return runApply(c, args[1:])
+	case "test":
+		return runTest(c, args[1:])
+	case "evidence":
+		return runEvidence(c, args[1:])
 	case "status":
-		os.Exit(runStatus(cl, args[1:]))
+		return runStatus(c, args[1:])
 	case "logs":
-		os.Exit(runLogs(cl, args[1:]))
+		return runLogs(c, args[1:])
 	case "exec":
-		os.Exit(runExec(cl, args[1:]))
+		return runExec(c, args[1:])
 	case "port-forward":
-		os.Exit(runPortForward(cl, args[1:]))
+		return runPortForward(c, args[1:])
+	case "server":
+		return runServer(c, args[1:])
 	case "version":
-		fmt.Println("cloudbox v1 (development)")
-	default:
-		fmt.Fprintf(os.Stderr, "cloudbox: unknown command %q\n\n%s", args[0], usage)
-		os.Exit(2)
+		return c.emit((&view{}).add("version", release.Describe()).add("released", release.Released()))
 	}
+	fmt.Fprintf(os.Stderr, "cloudbox: unknown command %q\n\n%s", args[0], usage)
+	return exitUsage
 }

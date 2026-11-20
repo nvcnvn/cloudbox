@@ -134,6 +134,9 @@ def step_impl(context):
         context.platform.run_setup(name).raise_for_status()
         context.platform.set_components(name, BASE_COMPONENTS)
     context.platform.register_cluster("prod-cluster", "production")
+    # The shared topology hosts sandboxes on the production cluster, so it is
+    # registered in both roles; a sandbox host is always a registered one.
+    context.platform.register_cluster("prod-cluster", "sandbox")
     context.platform.register_cluster("sbx-cluster", "sandbox")
     context.applications.create("shared-app", sandboxCluster="prod-cluster")
     context.applications.create("split-app", sandboxCluster="sbx-cluster")
@@ -160,7 +163,7 @@ def step_impl(context):
     assert set(shared.keys()) == set(split.keys()), (
         "evidence fact sets differ between topologies"
     )
-    for field in ("sealStatus", "valid", "substrateMatch", "capacityMode", "egressViolations"):
+    for field in ("sealStatus", "valid", "substrateParity", "capacityMode", "egressViolations"):
         assert shared[field] == split[field], (field, shared[field], split[field])
     assert shared["substrateDigest"] == split["substrateDigest"], (
         "same components must yield the same app-scoped substrate digest"
@@ -213,3 +216,87 @@ def step_impl(context):
     ).json()["checks"]
     signed = [c for c in checks if c.get("signature", "").startswith("signed:controller:")]
     assert len(signed) == 1 and signed[0]["postedBy"] == "cloudbox-controller", checks
+
+
+# --- The command line may start and reuse a local control plane (add-local-agent-mvp 3.1) ---
+
+
+@given("a developer machine with no control plane running")
+def step_impl(context):
+    assert not context.cli_surface.local_running(), context.cli_surface.local_state()
+
+
+@when("two commands requiring the control plane are run in turn")
+def step_impl(context):
+    surface = context.cli_surface
+    context.first_run = surface.declare_app("web", local=True)
+    context.first_state = surface.local_state()
+    context.second_run = surface.show_app("web", local=True)
+    context.second_state = surface.local_state()
+
+
+@then("the first starts a control plane")
+def step_impl(context):
+    run = context.first_run
+    assert run.exit_code == 0, run.output
+    assert "started a local control plane" in run.stderr, run.stderr
+    assert context.first_state and context.cli_surface.local_running(), context.first_state
+
+
+@then("the second uses the already-running one rather than starting another")
+def step_impl(context):
+    run = context.second_run
+    assert run.exit_code == 0, run.output
+    assert "started a local control plane" not in run.stderr, run.stderr
+    assert context.second_state["pid"] == context.first_state["pid"], (context.first_state, context.second_state)
+    # It is the same control plane: it remembers what the first command declared.
+    assert run.data()["name"] == "web", run.stdout
+
+
+@given("a bundle that server-side intake rejects")
+def step_impl(context):
+    context.rejected_bundle = context.bundles.timestamped_manifests()
+
+
+@when("it is applied through a CLI-started control plane")
+def step_impl(context):
+    surface = context.cli_surface
+    surface.declare_app("web", local=True)
+    host = surface.arrange_local_host()
+    assert surface.register_host(host, local=True).exit_code == 0
+    sandbox = surface.create_sandbox("web", local=True).data()["name"]
+    context.local_apply = surface.apply("web", sandbox, context.rejected_bundle, local=True)
+
+
+@then("it is rejected on the same grounds as when applied through a separately operated control plane")
+def step_impl(context):
+    surface = context.cli_surface
+    context.platform.ensure_ready_platform()
+    surface.declare_app("web")
+    sandbox = surface.create_sandbox("web").data()["name"]
+    operated = surface.apply("web", sandbox, context.rejected_bundle)
+    local = context.local_apply
+    assert local.exit_code == operated.exit_code == 1, (local.output, operated.output)
+    assert local.data()["error"] == operated.data()["error"], (local.stdout, operated.stdout)
+
+
+@given("a developer who addresses a running control plane explicitly")
+def step_impl(context):
+    assert context.platform.healthy()
+
+
+@when("they run a command requiring the control plane")
+def step_impl(context):
+    context.addressed_run = context.cli_surface.declare_app("web")
+
+
+@then("the addressed control plane serves the request")
+def step_impl(context):
+    assert context.addressed_run.exit_code == 0, context.addressed_run.output
+    assert context.applications.get("web")["name"] == "web"
+
+
+@then("no local control plane is started")
+def step_impl(context):
+    assert not context.cli_surface.local_running()
+    assert context.cli_surface.local_state() is None

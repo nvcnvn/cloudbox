@@ -3,6 +3,9 @@
 package core
 
 import (
+	"crypto/rand"
+	"encoding/hex"
+	"cloudbox/internal/intake"
 	"fmt"
 	"sync"
 	"time"
@@ -24,24 +27,13 @@ func ProductCRDs() []cluster.CRD {
 	return crds
 }
 
-// Contract is the boundary contract (C1): the complete, finite set of values
-// allowed to differ per environment. Nothing else varies (C3).
-type Contract struct {
-	SecretNames      []string     `json:"secretNames"`
-	IngressHostnames []string     `json:"ingressHostnames"`
-	EgressAllowlist  []string     `json:"egressAllowlist"`
-	Dependencies     []Dependency `json:"dependencies"`
-}
-
-// Dependency is an internal application dependency (C1): a target Application
-// plus the alias hostname bundles use to reach it. In v1 a dependency may be
-// satisfied by an allowlisted stub endpoint, recorded as stubbed in evidence
-// (S8 v1 alternative).
-type Dependency struct {
-	App          string `json:"app"`
-	Alias        string `json:"alias,omitempty"`
-	StubEndpoint string `json:"stubEndpoint,omitempty"`
-}
+// Contract and Dependency are the boundary contract (C1). They live in the
+// intake package, which validates bundles against them, so the CLI's offline
+// check can share the analysis without linking the control plane (ADR 0004).
+type (
+	Contract   = intake.Contract
+	Dependency = intake.Dependency
+)
 
 // Policies are per-application operational policy (S5, S7, G4, D3, X4).
 type Policies struct {
@@ -113,6 +105,9 @@ func errf(status int, format string, args ...any) *Error {
 
 // Core is the whole control plane behind the HTTP surface.
 type Core struct {
+	integrations Integrations
+	// userControlled marks clusters registered as user-controlled (ADR 0010).
+	userControlled map[string]bool
 	mu     sync.Mutex
 	driver cluster.Driver
 	now    func() time.Time
@@ -143,6 +138,11 @@ type Core struct {
 	auditAvailable bool
 	promotionSeq   int
 	sandboxSeq     int
+	// incarnation distinguishes this control plane's sandbox names from any
+	// earlier one's. State is in memory, so the sequence restarts at 1 after a
+	// restart; without this, a new sandbox could be named after (and land in
+	// the namespace of) a sandbox an earlier control plane left on the cluster.
+	incarnation string
 	holdSeal       bool // sim arrangement: leave the next sandbox provisioning (N1)
 }
 
@@ -178,20 +178,46 @@ func New(driver cluster.Driver, now func() time.Time) *Core {
 		databases:    map[string]*SimDatabase{},
 		profiles:     map[string]*DataProfile{},
 		auditAvailable: true,
+		incarnation:    newIncarnation(),
+		// No integration is present until the deployment declares it
+		// (ADR 0009): a released control plane refuses rather than simulates.
+		integrations: Integrations{},
+		userControlled: map[string]bool{},
 	}
 }
 
 // RegisterCluster records a cluster's role in the ClusterRegistry (CP3).
-func (c *Core) RegisterCluster(name, role string) error {
+// RegisterCluster registers a cluster in a role. userControlled records that
+// the registrant controls the cluster (ADR 0010): sandboxes on it are marked
+// user-controlled and their evidence can never back a check or a promotion.
+// The control plane cannot verify custody, so the flag only ever narrows
+// trust: it can mark a cluster user-controlled, never make one managed.
+func (c *Core) RegisterCluster(name, role string, userControlled bool) error {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-	if _, ok := c.driver.Cluster(name); !ok {
+	host, ok := c.driver.Cluster(name)
+	c.mu.Unlock()
+	if !ok {
 		return errf(404, "cluster %q is not known", name)
 	}
+	// A sandbox host must be shown to enforce NetworkPolicy before it is
+	// accepted (sandbox-lifecycle, design D2): the error belongs where the
+	// decision was made, not at the first sandbox several steps later. The
+	// probe owns its scratch namespaces and runs without holding c.mu — on a
+	// real cluster it takes as long as two canary pods.
+	if role == "sandbox" && !host.ProbeEnforcement() {
+		return errf(422,
+			"cluster %q refused as a sandbox host: unproven network policy enforcement — the enforcement probe found a connection the seal must deny was not denied, so this cluster's CNI does not enforce NetworkPolicy; install a CNI that enforces it (for example Calico) and register again",
+			name)
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	if c.roles[name] == nil {
 		c.roles[name] = map[string]bool{}
 	}
 	c.roles[name][role] = true
+	if userControlled {
+		c.userControlled[name] = true
+	}
 	return nil
 }
 
@@ -336,4 +362,13 @@ func (c *Core) SetSecretValue(appName, environment, name string) error {
 // environment. Callers hold c.mu.
 func (c *Core) hasSecretValue(appName, environment, name string) bool {
 	return c.secretValues[appName][environment][name]
+}
+
+// newIncarnation is a short random tag for this control plane's lifetime.
+func newIncarnation() string {
+	buf := make([]byte, 2)
+	if _, err := rand.Read(buf); err != nil {
+		return fmt.Sprintf("%04x", time.Now().UnixNano()&0xffff)
+	}
+	return hex.EncodeToString(buf)
 }

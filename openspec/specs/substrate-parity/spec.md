@@ -72,4 +72,34 @@ Feature: Substrate parity
       When operator X is upgraded in production
       Then application A's lockfile digest changes and its stale sandboxes stop producing valid evidence
       And application B's lockfile digest and evidence are unaffected
+
+  Rule: Parity with no registered production is unverified, never matched
+    When no production substrate is registered for an application, the control
+    plane MUST report that application's substrate parity as unverified. It
+    MUST NOT report a match, and no consumer of evidence MAY treat unverified
+    parity as a verified one. A comparison that did not happen is not a
+    comparison that succeeded.
+
+    Scenario: Evidence records parity as unverified when no production is registered
+      Given an application with no registered production substrate
+      And a sealed sandbox run for that application
+      When the run's evidence is evaluated
+      Then the evidence records substrate parity as unverified
+      And it does not record a substrate match
+
+    Scenario: The summary states parity was unverified rather than claiming a match
+      Given evidence for a run whose application has no registered production substrate
+      When the evidence summary is rendered
+      Then it states that substrate parity is unverified for want of a registered production substrate
+      And it nowhere claims the run was on a substrate matching production
+
+    Scenario: Unverified parity is not a mismatch either
+      Given evidence for a run whose application has no registered production substrate
+      When the run's evidence is evaluated
+      Then the evidence is not marked invalid for substrate mismatch
+
+    Scenario: Registering production resumes comparison
+      Given an application whose evidence records substrate parity as unverified
+      When a production substrate is registered for it
+      Then subsequent evidence records a substrate match or a mismatch rather than unverified
 ```

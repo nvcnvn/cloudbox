@@ -64,6 +64,8 @@ func NewWithDriver(driver cluster.Driver) *Server {
 func (s *Server) reset(world *sim.World) {
 	s.world = world
 	s.core = core.New(world, world.Now)
+	// The sim world's arrangement surfaces are its integrations (ADR 0009).
+	s.core.SetIntegrations(core.Integrations{SourceControl: true, GitOps: true, ProductionIngest: true})
 }
 
 // simRoutes is the sim driver's test-arrangement surface (ADR 0007): conjure
@@ -87,6 +89,9 @@ func (s *Server) simRoutes() {
 	s.mux.HandleFunc("POST /simctl/audit-sink", s.simAuditSink)
 	s.mux.HandleFunc("POST /simctl/databases/{app}/{datastore}", s.simSeedDatabase)
 	s.mux.HandleFunc("POST /simctl/fail-migration", s.simFailMigration)
+	s.mux.HandleFunc("POST /simctl/integrations", s.simIntegrations)
+	s.mux.HandleFunc("POST /simctl/clusters/{cluster}/enforcement", s.simSetEnforcement)
+	s.mux.HandleFunc("POST /simctl/clusters/{cluster}/registry", s.simSetRegistry)
 }
 
 func (s *Server) v1Routes() {
@@ -331,13 +336,14 @@ func (s *Server) setup(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) registerCluster(w http.ResponseWriter, r *http.Request) {
 	req, ok := decode[struct {
-		Cluster string `json:"cluster"`
-		Role    string `json:"role"`
+		Cluster        string `json:"cluster"`
+		Role           string `json:"role"`
+		UserControlled bool   `json:"userControlled"`
 	}](w, r)
 	if !ok {
 		return
 	}
-	if err := s.core.RegisterCluster(req.Cluster, req.Role); err != nil {
+	if err := s.core.RegisterCluster(req.Cluster, req.Role, req.UserControlled); err != nil {
 		writeErr(w, err)
 		return
 	}
@@ -442,8 +448,14 @@ func (s *Server) createSandbox(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if req.Local {
+		// The removed local option is refused by name rather than ignored, so
+		// a caller never gets a sandbox somewhere it did not ask for.
+		writeJSON(w, 400, map[string]string{"error": "the local option was removed: the product does not create clusters; register a cluster you control as a sandbox host (userControlled) and create the sandbox there (ADR 0010)"})
+		return
+	}
 	sb, err := s.core.CreateSandbox(req.App, actor(r), core.CreateSandboxOptions{
-		Local: req.Local, TTLSeconds: req.TTLSeconds, Agent: req.Agent,
+		TTLSeconds: req.TTLSeconds, Agent: req.Agent,
 	})
 	if err != nil {
 		writeErr(w, err)
@@ -883,4 +895,64 @@ func (s *Server) simAuditSink(w http.ResponseWriter, r *http.Request) {
 	}
 	s.core.SetAuditSink(req.Available)
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// simIntegrations withdraws (or restores) integrations so a scenario can stand
+// up a released control plane under the sim driver (ADR 0009). Fields left
+// out keep their current value.
+func (s *Server) simIntegrations(w http.ResponseWriter, r *http.Request) {
+	req, ok := decode[struct {
+		SourceControl    *bool `json:"sourceControl"`
+		GitOps           *bool `json:"gitops"`
+		ProductionIngest *bool `json:"productionIngest"`
+	}](w, r)
+	if !ok {
+		return
+	}
+	in := s.core.Integrations()
+	if req.SourceControl != nil {
+		in.SourceControl = *req.SourceControl
+	}
+	if req.GitOps != nil {
+		in.GitOps = *req.GitOps
+	}
+	if req.ProductionIngest != nil {
+		in.ProductionIngest = *req.ProductionIngest
+	}
+	s.core.SetIntegrations(in)
+	writeJSON(w, 200, in)
+}
+
+func (s *Server) simSetEnforcement(w http.ResponseWriter, r *http.Request) {
+	req, ok := decode[struct {
+		Enforcing bool `json:"enforcing"`
+	}](w, r)
+	if !ok {
+		return
+	}
+	cl, found := s.world.Cluster(r.PathValue("cluster"))
+	sc, isSim := cl.(*sim.SimCluster)
+	if !found || !isSim {
+		writeJSON(w, 404, map[string]string{"error": "cluster not known"})
+		return
+	}
+	sc.SetEnforcing(req.Enforcing)
+	writeJSON(w, 200, map[string]bool{"enforcing": req.Enforcing})
+}
+
+func (s *Server) simSetRegistry(w http.ResponseWriter, r *http.Request) {
+	req, ok := decode[struct {
+		Reachable bool `json:"reachable"`
+	}](w, r)
+	if !ok {
+		return
+	}
+	cl, found := s.world.Cluster(r.PathValue("cluster"))
+	sc, isSim := cl.(*sim.SimCluster)
+	if !found || !isSim {
+		writeJSON(w, 404, map[string]string{"error": "cluster not known"})
+		return
+	}
+	sc.SetRegistryReachable(req.Reachable)
+	writeJSON(w, 200, map[string]bool{"reachable": req.Reachable})
 }

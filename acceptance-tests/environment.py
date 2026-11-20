@@ -120,6 +120,10 @@ def after_all(context):
 
 
 def after_scenario(context, scenario):
+    # A control plane the CLI started for this scenario dies with it.
+    surface = getattr(context, "cli_surface", None)
+    if surface:
+        surface.cleanup()
     # Real-cluster runs have no /simctl/reset; tear down the scenario's
     # sandbox (and with it its namespace) so the cluster stays bounded.
     if getattr(context, "driver", "sim") != "sim":

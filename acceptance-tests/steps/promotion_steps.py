@@ -372,7 +372,8 @@ def step_impl(context):
 def step_impl(context):
     assert "--env" not in context.usage, context.usage
     assert context.env_prod_attempt.exit_code != 0
-    assert "unknown command" in context.env_prod_attempt.output
+    # apply exists at the sandbox level; it refuses the production flag by name.
+    assert "unknown flag --env" in context.env_prod_attempt.output, context.env_prod_attempt.output
     assert context.promote_prod_attempt.exit_code != 0
     assert "unknown command" in context.promote_prod_attempt.output
 

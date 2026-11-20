@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"cloudbox/internal/cluster"
+	"cloudbox/internal/release"
 )
 
 // BlockedAttempt is one recorded, attributed denied egress attempt (N4).
@@ -34,7 +35,14 @@ type Sandbox struct {
 	Owner         string `json:"owner"`
 	Cluster       string `json:"cluster"`
 	Namespace     string `json:"namespace"`
-	Local         bool   `json:"local"` // user-controlled cluster (S3)
+	// UserControlled: the host is a cluster the developer or agent controls,
+	// so evidence from it is non-promotable and non-postable (ADR 0004, 0010).
+	UserControlled bool `json:"userControlled"`
+	// EgressProxy is the allowlist's enforcement point; AllowlistEnforced is
+	// true only while it is available. Default-deny holds without the proxy,
+	// the FQDN allowlist does not (release-integrity).
+	EgressProxy       *ProxyStatus `json:"egressProxy,omitempty"`
+	AllowlistEnforced bool         `json:"allowlistEnforced"`
 	State         string `json:"state"` // "provisioning" | "ready" | "unsealed-cluster-not-enforcing" | "destroyed"
 	Sealed        bool   `json:"sealed"`
 	SealVerified  bool   `json:"sealVerified"`
@@ -97,14 +105,22 @@ type Sandbox struct {
 }
 
 // sandboxHost picks the cluster new sandboxes land on: the application's
-// pinned cluster if set (CP3), else a registered sandbox cluster, else any
-// cluster where setup ran. Callers hold c.mu.
+// pinned cluster if set (CP3), else a registered sandbox cluster. Either way
+// it must be a registered sandbox host — registration is where enforcement is
+// proven, so neither a pin nor a fallback may route around it
+// (sandbox-lifecycle). Callers hold c.mu.
 func (c *Core) sandboxHost(app *Application) (cluster.Cluster, error) {
 	if app != nil && app.SandboxCluster != "" {
-		if cl, ok := c.driver.Cluster(app.SandboxCluster); ok {
-			return cl, nil
+		cl, ok := c.driver.Cluster(app.SandboxCluster)
+		if !ok {
+			return nil, errf(404, "application sandbox cluster %q is not known", app.SandboxCluster)
 		}
-		return nil, errf(404, "application sandbox cluster %q is not known", app.SandboxCluster)
+		if !c.roles[app.SandboxCluster]["sandbox"] {
+			return nil, errf(409,
+				"application sandbox cluster %q is not a registered sandbox host: register it as a sandbox host first (registration proves it enforces NetworkPolicy)",
+				app.SandboxCluster)
+		}
+		return cl, nil
 	}
 	for name, roles := range c.roles {
 		if roles["sandbox"] {
@@ -113,17 +129,11 @@ func (c *Core) sandboxHost(app *Application) (cluster.Cluster, error) {
 			}
 		}
 	}
-	for name := range c.installed {
-		if cl, ok := c.driver.Cluster(name); ok {
-			return cl, nil
-		}
-	}
-	return nil, errf(409, "no cluster available: run setup on a cluster first")
+	return nil, errf(409, "no sandbox host is registered: register a cluster that enforces NetworkPolicy as a sandbox host first")
 }
 
 // CreateSandboxOptions vary one creation.
 type CreateSandboxOptions struct {
-	Local      bool
 	TTLSeconds int64
 	PR         string
 	Agent      bool
@@ -144,23 +154,14 @@ func (c *Core) createSandboxLocked(appName, actor string, opts CreateSandboxOpti
 
 	start := c.now()
 	c.sandboxSeq++
-	name := fmt.Sprintf("%s-sbx-%d", appName, c.sandboxSeq)
+	name := fmt.Sprintf("%s-sbx-%s-%d", appName, c.incarnation, c.sandboxSeq)
 
-	var host cluster.Cluster
-	if opts.Local {
-		// S3: one command provisions a local (user-controlled) cluster from
-		// the application's substrate lockfile; same seal semantics.
-		local, err := c.provisionLocalCluster(name, appName)
-		if err != nil {
-			return nil, err
-		}
-		host = local
-	} else {
-		var err error
-		host, err = c.sandboxHost(app)
-		if err != nil {
-			return nil, err
-		}
+	// The product does not create clusters (ADR 0010): every sandbox lands on
+	// a registered host, and whether that host is user-controlled is a
+	// property of its registration.
+	host, err := c.sandboxHost(app)
+	if err != nil {
+		return nil, err
 	}
 
 	sb := &Sandbox{
@@ -169,7 +170,7 @@ func (c *Core) createSandboxLocked(appName, actor string, opts CreateSandboxOpti
 		Owner:        actor,
 		Cluster:      host.Name(),
 		Namespace:    name,
-		Local:        opts.Local,
+		UserControlled: host.UserControlled() || c.userControlled[host.Name()],
 		State:        "provisioning",
 		CreatedAt:    start,
 		LastActivity: start,
@@ -209,6 +210,7 @@ func (c *Core) sealSandboxLocked(sb *Sandbox, app *Application, host cluster.Clu
 	sb.Sealed = true
 	sb.SealVerified = true
 	sb.State = "ready"
+	c.refreshProxyLocked(sb)
 }
 
 // CompleteSeal finishes a held provisioning (sim arrangement for N1).
@@ -272,6 +274,81 @@ func (c *Core) Tick() {
 	}
 }
 
+// ProxyStatus is what the cluster shows of a sandbox's egress proxy.
+type ProxyStatus struct {
+	Image  string `json:"image"`
+	State  string `json:"state"` // "available" | "pending" | "unavailable"
+	Reason string `json:"reason,omitempty"`
+}
+
+// refreshProxyLocked reads the proxy Deployment the driver deployed at seal
+// time and reconciles the record with it; on a real cluster an image pull
+// fails after admission, so this runs on reads too. Callers hold c.mu.
+func (c *Core) refreshProxyLocked(sb *Sandbox) {
+	if !sb.Sealed || sb.State == "destroyed" {
+		return
+	}
+	host, ok := c.driver.Cluster(sb.Cluster)
+	if !ok {
+		return
+	}
+	obj, ok := host.GetRaw(sb.Namespace, "Deployment", release.ProxyName)
+	if !ok {
+		sb.EgressProxy = &ProxyStatus{Image: release.EgressProxyImage(), State: "unavailable",
+			Reason: "the egress proxy was not deployed"}
+		sb.AllowlistEnforced = false
+		return
+	}
+	st := proxyStatusOf(obj)
+	sb.EgressProxy = &st
+	sb.AllowlistEnforced = st.State == "available"
+}
+
+func proxyStatusOf(obj cluster.Object) ProxyStatus {
+	st := ProxyStatus{State: "pending"}
+	if spec, ok := obj.Manifest["spec"].(map[string]any); ok {
+		if tmpl, ok := spec["template"].(map[string]any); ok {
+			if pod, ok := tmpl["spec"].(map[string]any); ok {
+				if cs, ok := pod["containers"].([]any); ok && len(cs) > 0 {
+					if c0, ok := cs[0].(map[string]any); ok {
+						st.Image, _ = c0["image"].(string)
+					}
+				}
+			}
+		}
+	}
+	status, _ := obj.Manifest["status"].(map[string]any)
+	if n, ok := asInt(status["availableReplicas"]); ok && n > 0 {
+		st.State = "available"
+		return st
+	}
+	conds, _ := status["conditions"].([]any)
+	for _, raw := range conds {
+		cond, _ := raw.(map[string]any)
+		if cond["type"] == "Progressing" && cond["status"] == "False" {
+			st.State = "unavailable"
+			st.Reason = fmt.Sprintf(
+				"egress proxy image %s could not be provisioned (%v); allowlisted egress is denied until it is",
+				st.Image, cond["reason"])
+			return st
+		}
+	}
+	st.Reason = "egress proxy " + st.Image + " is starting; allowlisted egress is denied until it is available"
+	return st
+}
+
+func asInt(v any) (int64, bool) {
+	switch n := v.(type) {
+	case int:
+		return int64(n), true
+	case int64:
+		return n, true
+	case float64:
+		return int64(n), true
+	}
+	return 0, false
+}
+
 // GetSandbox returns a sandbox record.
 func (c *Core) GetSandbox(name string) (*Sandbox, error) {
 	c.mu.Lock()
@@ -282,6 +359,7 @@ func (c *Core) GetSandbox(name string) (*Sandbox, error) {
 	}
 	c.refreshObservedDiagnosticsLocked(sb)
 	c.refreshBlockedEgressLocked(sb)
+	c.refreshProxyLocked(sb)
 	return sb, nil
 }
 

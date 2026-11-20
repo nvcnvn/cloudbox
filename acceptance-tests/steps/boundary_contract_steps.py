@@ -200,5 +200,11 @@ def step_impl(context):
 
 @then("the evidence nowhere presents the dependency as parity-verified")
 def step_impl(context):
-    blob = str(context.evidence).lower()
-    assert "parity" not in blob and "prod-match: true" not in blob, blob
+    # Scoped to how the dependency is presented: evidence also carries the
+    # application's substrateParity, which is a different fact.
+    deps = str(context.evidence["dependencies"]).lower()
+    summary = context.evidence["summary"].lower()
+    dep_clause = summary[summary.index("dependencies ["):] if "dependencies [" in summary else summary
+    for blob in (deps, dep_clause):
+        assert "parity" not in blob and "prod-match: true" not in blob, blob
+    assert all(d["status"] != "linked" for d in context.evidence["dependencies"]), deps

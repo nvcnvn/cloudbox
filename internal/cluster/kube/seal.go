@@ -17,6 +17,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	"cloudbox/internal/cluster"
+	"cloudbox/internal/release"
 )
 
 const (
@@ -24,7 +25,7 @@ const (
 	// admits egress to them and nothing else beyond cluster DNS.
 	proxyLabelKey   = "cloudbox.dev/component"
 	proxyLabelValue = "egress-proxy"
-	proxyName       = "cloudbox-egress-proxy"
+	proxyName       = release.ProxyName
 	proxyPort       = 3128
 	proxyAdminPort  = 3129
 
@@ -338,7 +339,11 @@ func (c *Cluster) AttemptEgress(namespace, destination string) cluster.EgressRes
 	}
 	if c.onLiveAllowlist(namespace, dest) {
 		// The seal admits no direct egress, so an allowlisted FQDN is reachable
-		// only through the proxy that enforces the allowlist (ADR 0001).
+		// only through the proxy that enforces the allowlist (ADR 0001). With
+		// no proxy running, there is no path: allowlisted egress fails closed.
+		if !c.proxyAvailable(namespace) {
+			return denied
+		}
 		return cluster.EgressResult{Allowed: true, Via: "egress-proxy"}
 	}
 	return denied

@@ -229,52 +229,11 @@ def step_impl(context):
     assert context.kube_nonenforcing.accepts_network_policy(), (
         "the non-enforcing cluster rejected a NetworkPolicy object"
     )
+    context.candidate_cluster = context.kube_nonenforcing.name
 
 
-@when("a sandbox is created on that cluster")
-def step_impl(context):
-    context.app_name = "app-%s" % uuid.uuid4().hex[:6]
-    # Pinned to the non-enforcing cluster; creation succeeds but the sandbox
-    # must come back unsealed.
-    context.applications.create(
-        context.app_name, sandboxCluster=context.kube_nonenforcing.name
-    )
-    context.sandbox_name = context.sandboxes.create(context.app_name, arrange=False)
-    record = context.sandboxes.record(context.sandbox_name)
-    record.raise_for_status()
-    context.sandbox_record = record.json()
-
-
-@then("the enforcement probe fails")
-def step_impl(context):
-    assert not context.sandbox_record["sealVerified"], (
-        "the probe passed on a non-enforcing cluster: %s" % context.sandbox_record
-    )
-
-
-@then("the sandbox is not reported sealed")
-def step_impl(context):
-    assert not context.sandbox_record["sealed"], context.sandbox_record
-    assert context.sandbox_record["state"] != "ready", context.sandbox_record
-
-
-@then("no evidence is emitted for that sandbox")
-def step_impl(context):
-    resp = context.sandboxes.evidence_response(context.sandbox_name)
-    assert resp.status_code == 409, (
-        "expected evidence to be refused, got %d: %s" % (resp.status_code, resp.text)
-    )
-    context.evidence_refusal = resp.json().get("error", "")
-    assert "no evidence" in context.evidence_refusal, context.evidence_refusal
-
-
-@then("the reported cause names unenforced network policy")
-def step_impl(context):
-    state = context.sandbox_record["state"]
-    assert "not-enforcing" in state, (
-        "sandbox state %r does not name unenforced network policy" % state
-    )
-    assert "enforcement probe" in context.evidence_refusal, context.evidence_refusal
+# Registration now meets the probe on real infrastructure: the When/Then steps
+# live in sandbox_lifecycle_steps.py, shared with the sim scenarios.
 
 
 # --- Rule: Real workload readiness and squeeze failure are observed, not simulated ---
@@ -711,3 +670,36 @@ def step_impl(context):
         if r.status_code != 404
     ]
     assert not served, "simulation arrangement routes served under kube: %s" % served
+
+
+# --- Rule: An egress proxy that cannot be pulled leaves allowlisted egress denied ---
+
+UNPULLABLE_PROXY_IMAGE = "ghcr.io/nvcnvn/cloudbox-egress-proxy@sha256:" + "0" * 64
+
+
+@when("its egress proxy is redeployed from an image the cluster cannot pull")
+def step_impl(context):
+    context.kube.redeploy_proxy_unpullable(context.sandbox_name, UNPULLABLE_PROXY_IMAGE)
+    # The proxy's progress deadline is 60s; the record reconciles on read.
+    deadline = time.time() + 180
+    while time.time() < deadline:
+        record = context.sandboxes.record(context.sandbox_name).json()
+        if (record.get("egressProxy") or {}).get("state") == "unavailable":
+            break
+        time.sleep(5)
+    context.sandbox_record = record
+
+
+@then("the sandbox reports the egress proxy unavailable naming that image")
+def step_impl(context):
+    proxy = context.sandbox_record.get("egressProxy") or {}
+    assert proxy.get("state") == "unavailable", proxy
+    assert UNPULLABLE_PROXY_IMAGE in proxy.get("reason", ""), proxy
+
+
+@then("a workload's request to the declared endpoint fails")
+def step_impl(context):
+    context.bundles.apply(context.app_name, context.sandbox_name, ALLOWED_EGRESS_YAML)
+    context.bundles.last_response.raise_for_status()
+    logs = wait_for_log_markers(context, "fetcher", ["FETCH:"])
+    assert "FETCH:OK" not in logs, "the declared endpoint was reached with no proxy:\n%s" % logs

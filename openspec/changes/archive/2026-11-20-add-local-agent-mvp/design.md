@@ -110,6 +110,17 @@ This reuses the conformance run's existing enforcement precondition rather than
 inventing a second mechanism; `conformance-ci` already specifies exactly this
 check and CI already exercises it against a deliberately non-enforcing cluster.
 
+**Pinned clusters are not a way around it (decided 2026-11-20).** An
+application's `sandboxCluster` pin previously named any cluster the driver
+knew, registered or not. That let a sandbox land on a cluster registration
+would have refused, contradicting "no sandbox can be created on it". A pin
+must now name a registered sandbox host. Consequences: the conformance gate
+proves enforcement by registering its target, which is the same probe through
+the same path a user takes. The `kube-driver` real-cluster N7 scenario moves
+to registration. The sandbox-creation probe stays as the last line for a host
+whose CNI stops enforcing after registration, proven in the simulation only
+(recorded divergence).
+
 ### D3: The CLI starts and reuses a control plane; it never becomes one
 
 **Decision.** When no control plane is addressed, the CLI starts one on the
@@ -282,27 +293,50 @@ removes.
 
 ## Open Questions
 
-1. **Does the enforcement probe at registration need its own canary namespace,
-   or can it reuse the seal probe's mechanism unchanged?** The seal probe runs
-   inside a sandbox being provisioned; registration has no sandbox yet. If the
-   probe needs a scratch namespace, its cleanup on failure must be specified.
-2. **How is the pinned proxy image published, and by whom?** The reference must
-   be resolvable from an arbitrary user cluster, which implies a public
-   registry and a release job that pushes it. Registry choice, tagging scheme
-   (digest-pinned versus version-tagged), and multi-architecture coverage are
-   unresolved, and the last one bites immediately: the conformance harness
-   already selects `arm64` or `amd64` per node.
-3. **Should the daemon's local state file record more than the build version —
-   in particular, registered clusters — so a restart is less costly?** This
-   edges toward the durable-state decision the change explicitly defers, and
-   the line between "reconnection hint" and "persistence" needs drawing before
-   implementation rather than during it.
-4. **Do any of this change's new rules belong in the `@conformance` subset?**
-   Enforcement refusal at registration (D2) is genuinely cluster-dependent and
-   arguably must be proven against the non-enforcing cluster CI already stands
-   up; the rest is control-plane logic. If any are tagged,
-   `acceptance-tests/CONFORMANCE.md` gains rows and its recorded-exclusion
-   table must stay accurate.
+1. **Resolved (2026-11-20): registration reuses the seal probe unchanged; it
+   needs no namespace of its own.** The premise was wrong: `ProbeEnforcement()`
+   is cluster-scoped on the frozen contract, not sandbox-scoped. The kube
+   driver already creates its own two scratch namespaces
+   (`cloudbox-probe-base-<ts>`, `cloudbox-probe-seal-<ts>`) and deletes both
+   by `defer` on every return path, failure included. Registration calls it as
+   sandbox creation does, with no contract change (ADR 0008). Residual: if the
+   control plane dies mid-probe, the timestamped namespaces leak. They are
+   identifiable by prefix, hold only a completed canary pod, and are accepted
+   rather than given a reaper.
+2. **Resolved (2026-11-20): GHCR, digest-pinned, multi-arch, published by the
+   release job.** The image is `ghcr.io/nvcnvn/cloudbox-egress-proxy`. A
+   GitHub Actions release job runs on a version tag, builds `linux/amd64` and
+   `linux/arm64` with buildx, pushes with the workflow's own `GITHUB_TOKEN`,
+   and stamps the pushed manifest-list digest into both binaries as
+   `ghcr.io/nvcnvn/cloudbox-egress-proxy@sha256:…`. Reasons: a digest cannot
+   be re-pointed after release, so the binary and the image it deploys are
+   one artifact. GHCR needs no credential beyond the repository's own, and is
+   anonymously pullable once the package is public. A manifest list lets
+   every node resolve its own architecture, which the conformance harness
+   already needs. An unreleased build keeps the locally loaded `:dev` image
+   and says so (task 4.4).
+3. **Resolved (2026-11-20): the state file records how to reach the daemon and
+   which build started it, nothing more.** Its fields are address, pid,
+   driver, start time, and build identity (version plus a digest of the
+   `cloudboxd` binary, so a rebuilt daemon is replaced, not reused). The line
+   is this: anything the file holds must be true of the *process*, not of the
+   *product's state*. Registered clusters fail that test. Replaying them on
+   restart would be persistence by the back door: a second, unvalidated copy
+   of control-plane state that can disagree with the cluster. It belongs with
+   the CRD-versus-database decision this change defers. The cost is the
+   documented one: after a restart, the agent re-registers.
+4. **Resolved (2026-11-20): two rules join the `@conformance` subset, both
+   through the `kube-driver` delta.** (a) Registration refuses a non-enforcing
+   host. This is the real-cluster scenario of the MODIFIED non-enforcing-CNI
+   rule, asserted against the deliberately non-enforcing Kind cluster CI
+   already stands up. (b) An unpullable egress proxy is reported and
+   allowlisted egress fails closed. This is new kube-driver code (progress
+   deadline, availability read, fail-closed evaluation) that only a real
+   cluster exercises. Everything else in this change (parity state, refusals,
+   CLI surface, version stamping, containment wording) is control-plane logic,
+   and the sim proves it as well as a cluster would. The pinned-reference
+   scenario is recorded as an exclusion in `acceptance-tests/CONFORMANCE.md`
+   until the release job has published an image a CI cluster can pull.
 5. **Carried forward from `add-cloudbox-v1` Open Question 1 (evidence retention
    and GC).** A local release makes it less pressing — evidence dies with the
    daemon — but that *is* a retention policy, and it should be stated as one in

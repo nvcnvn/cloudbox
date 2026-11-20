@@ -17,6 +17,14 @@ type WitnessedActivity struct {
 	Events int       `json:"events"`
 }
 
+// Substrate parity states (substrate-parity). Unverified is its own state,
+// never collapsed into either of the others.
+const (
+	ParityMatch      = "match"
+	ParityMismatch   = "mismatch"
+	ParityUnverified = "unverified"
+)
+
 // DependencyStatus reports how a declared dependency was satisfied (S8/C1).
 type DependencyStatus struct {
 	App    string `json:"app"`
@@ -26,7 +34,7 @@ type DependencyStatus struct {
 // Evidence is the (growing) record of one sandbox's current run.
 type Evidence struct {
 	Sandbox      string      `json:"sandbox"`
-	Source       string      `json:"source"` // "managed" | "local" (S3/CP4 trust boundary)
+	Source       string      `json:"source"` // "managed" | "user-controlled" (ADR 0004 trust boundary)
 	BundleDigest string      `json:"bundleDigest,omitempty"`
 	Transforms   []Transform `json:"transforms"`
 
@@ -40,7 +48,11 @@ type Evidence struct {
 	EgressRecordIncomplete bool   `json:"egressRecordIncomplete"`
 	EgressRecordGap        string `json:"egressRecordGap,omitempty"`
 	SubstrateDigest      string             `json:"substrateDigest,omitempty"`
-	SubstrateMatch       bool               `json:"substrateMatch"`
+	// SubstrateParity is match, mismatch, or unverified. It is deliberately
+	// not a boolean: with no production substrate registered there was no
+	// comparison, and a bool would have to call that a match or a mismatch,
+	// both untrue (substrate-parity, design D4).
+	SubstrateParity      string             `json:"substrateParity"`
 	Fidelity             map[string]string  `json:"fidelity"` // datastore → level (D2)
 	CapacityMode         string             `json:"capacityMode,omitempty"`
 	AutoscalersSuspended []string           `json:"autoscalersSuspended,omitempty"`
@@ -70,8 +82,8 @@ func (c *Core) evidenceFor(sb *Sandbox) *Evidence {
 	ev, ok := c.evidence[sb.Name]
 	if !ok {
 		source := "managed"
-		if sb.Local {
-			source = "local"
+		if sb.UserControlled {
+			source = "user-controlled"
 		}
 		ev = &Evidence{
 			Sandbox: sb.Name, Source: source,
@@ -140,11 +152,15 @@ func (c *Core) snapshotEvidence(sb *Sandbox) *Evidence {
 		ev.Valid = false
 		ev.InvalidReasons = append(ev.InvalidReasons, "seal not verified")
 	}
-	ev.SubstrateMatch = true
+	ev.SubstrateParity = ParityUnverified
 	if prod, ok := c.productionCluster(); ok {
 		prodDigest := c.lockfileFor(sb.App, prod).Digest
-		ev.SubstrateMatch = ev.SubstrateDigest == prodDigest
-		if !ev.SubstrateMatch && !ev.substrateOverridden {
+		ev.SubstrateParity = ParityMismatch
+		if ev.SubstrateDigest == prodDigest {
+			ev.SubstrateParity = ParityMatch
+		}
+		// Unverified never invalidates: P2 invalidates on mismatch only.
+		if ev.SubstrateParity == ParityMismatch && !ev.substrateOverridden {
 			// P2: evidence is invalid on substrate digest mismatch.
 			ev.Valid = false
 			ev.InvalidReasons = append(ev.InvalidReasons,
@@ -252,9 +268,15 @@ func renderSummary(ev *Evidence) string {
 				ev.EgressRecordGap)
 		}
 	}
-	substrate := "a substrate matching production"
-	if !ev.SubstrateMatch {
+	var substrate string
+	switch ev.SubstrateParity {
+	case ParityMatch:
+		substrate = "a substrate matching production"
+	case ParityMismatch:
 		substrate = "a substrate NOT matching production"
+	default:
+		// Never fall through to a match: an uncompared run says so.
+		substrate = "a substrate whose parity with production is UNVERIFIED (no production substrate is registered, so none was compared)"
 	}
 
 	return fmt.Sprintf(
@@ -294,9 +316,9 @@ func (c *Core) requireManagedLocked(sandboxName, action string) error {
 	if !ok {
 		return errf(404, "sandbox %q is not known", sandboxName)
 	}
-	if sb.Local {
+	if sb.UserControlled {
 		return errf(403,
-			"cannot %s: sandbox %q runs on a user-controlled local cluster, so its evidence is not from a control-plane-managed sandbox and is non-postable and non-promotable (S3)",
+			"cannot %s: sandbox %q runs on a user-controlled cluster, so its evidence is not from a control-plane-managed sandbox and is non-postable and non-promotable (ADR 0004)",
 			action, sandboxName)
 	}
 	return nil

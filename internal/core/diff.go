@@ -26,6 +26,9 @@ type ProductionState struct {
 func (c *Core) SetProductionState(appName, actor, manifestYAML string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if err := c.requireIntegration(c.integrations.ProductionIngest, IntegrationProductionIngest, "set production state"); err != nil {
+		return err
+	}
 	app, ok := c.apps[appName]
 	if !ok {
 		return errf(404, "application %q is not known", appName)

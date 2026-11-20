@@ -4,10 +4,12 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"log"
 	"net/http"
 
 	"cloudbox/internal/cluster/kube"
+	"cloudbox/internal/release"
 	"cloudbox/internal/server"
 	"cloudbox/internal/sim"
 )
@@ -15,7 +17,13 @@ import (
 func main() {
 	addr := flag.String("addr", "127.0.0.1:8080", "listen address")
 	driver := flag.String("driver", "sim", "cluster driver: sim (simulated clusters) or kube")
+	showVersion := flag.Bool("version", false, "report the build and exit")
 	flag.Parse()
+	if *showVersion {
+		fmt.Println("cloudboxd " + release.Describe())
+		fmt.Println("egress proxy image: " + release.EgressProxyImage())
+		return
+	}
 
 	switch *driver {
 	case "sim":

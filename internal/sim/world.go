@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"cloudbox/internal/cluster"
+	"cloudbox/internal/release"
 )
 
 // World holds every simulated cluster and the simulated clock for one
@@ -125,6 +126,9 @@ type SimCluster struct {
 	world          *World
 	name           string
 	enforcesNetPol bool
+	// registryUnreachable models a cluster that cannot pull the release's
+	// egress proxy image (release-integrity).
+	registryUnreachable bool
 	userControlled bool
 	k8sMinor       string
 	components     []cluster.Component
@@ -210,6 +214,41 @@ func (c *SimCluster) SealNamespace(name string, allowlist []string) {
 	// them fails silently, which is exactly what ProbeEnforcement catches.
 	ns.sealed = true
 	ns.allowlist = append([]string{}, allowlist...)
+	c.deployProxyLocked(name)
+}
+
+// deployProxyLocked models the kube driver's per-namespace egress proxy as the
+// Deployment object the real cluster would hold: the image it was deployed
+// from and whether it came up. Callers hold c.mu.
+func (c *SimCluster) deployProxyLocked(namespace string) {
+	image := release.EgressProxyImage()
+	status := map[string]any{"availableReplicas": 1}
+	if c.registryUnreachable {
+		status = map[string]any{
+			"availableReplicas": 0,
+			"conditions": []any{map[string]any{
+				"type": "Progressing", "status": "False", "reason": "ProgressDeadlineExceeded",
+				"message": "image " + image + " could not be pulled",
+			}},
+		}
+	}
+	obj := cluster.FromManifest(map[string]any{
+		"apiVersion": "apps/v1", "kind": "Deployment",
+		"metadata": map[string]any{"name": release.ProxyName, "namespace": namespace},
+		"spec": map[string]any{"template": map[string]any{"spec": map[string]any{
+			"containers": []any{map[string]any{"name": "proxy", "image": image}},
+		}}},
+		"status": status,
+	})
+	c.rawObjects[rawKey(namespace, "Deployment", release.ProxyName)] = obj
+}
+
+// SetRegistryReachable is sim-only arrangement: whether the cluster can pull
+// the release's egress proxy image.
+func (c *SimCluster) SetRegistryReachable(reachable bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.registryUnreachable = !reachable
 }
 
 func (c *SimCluster) ProbeEnforcement() bool {
@@ -256,6 +295,11 @@ func (c *SimCluster) AttemptEgress(namespace, destination string) cluster.Egress
 	}
 	for _, fqdn := range ns.allowlist {
 		if fqdn == destination {
+			// Allowlisted egress exists only through the proxy; without a
+			// running proxy it fails closed.
+			if c.registryUnreachable {
+				return cluster.EgressResult{Allowed: false, Via: "denied"}
+			}
 			return cluster.EgressResult{Allowed: true, Via: "egress-proxy"}
 		}
 	}
@@ -287,4 +331,13 @@ func (c *SimCluster) Workloads(namespace string) []cluster.Workload {
 		return nil
 	}
 	return append([]cluster.Workload{}, ns.workloads...)
+}
+
+// SetEnforcing is sim-only arrangement: the cluster's CNI starts or stops
+// enforcing NetworkPolicy after the fact, e.g. replaced underneath a
+// registered host. Not on the cluster contract (ADR 0008).
+func (c *SimCluster) SetEnforcing(enforcing bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.enforcesNetPol = enforcing
 }

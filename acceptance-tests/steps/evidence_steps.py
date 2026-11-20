@@ -106,7 +106,7 @@ def step_impl(context):
 def step_impl(context):
     ev = context.evidence
     assert ev["sealStatus"] == "sealed" and ev["egressViolations"] == 0, ev
-    assert ev["substrateMatch"] is True and ev["substrateDigest"], ev
+    assert ev["substrateParity"] == "match" and ev["substrateDigest"], ev
 
 
 @then("it records per-datastore fidelity, capacity mode, intake transforms, readiness, and observed healthy duration")

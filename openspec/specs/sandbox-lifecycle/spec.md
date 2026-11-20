@@ -40,22 +40,6 @@ Feature: Sandbox lifecycle
       Then the sandbox reports sealed and ready for apply within thirty seconds
       And any remaining wait is attributable to the user's own workloads
 
-  Rule: Local sandboxes provision from the substrate lockfile
-    One command MUST provision a local Kind cluster from the application's
-    substrate lockfile behaving as a valid sandbox; local evidence MUST be
-    non-promotable and non-postable because the cluster is user-controlled.
-
-    Scenario: One command yields a local sandbox with the same seal semantics
-      Given an application with a substrate lockfile
-      When the developer creates a sandbox with the local option
-      Then a local Kind cluster is provisioned from the lockfile
-      And the sandbox enforces the same seal and iteration semantics as a managed sandbox
-
-    Scenario: Local-sandbox evidence cannot reach a check or a promotion
-      Given evidence produced by a local sandbox
-      When the developer attempts to post an evidence check or open a promotion from it
-      Then the attempt is refused because the evidence source is not a control-plane-managed sandbox
-
   Rule: Sandboxes expire and stay within application quotas
     Sandboxes MUST support TTL and idle expiry and per-application resource
     quotas.
@@ -138,4 +122,43 @@ Feature: Sandbox lifecycle
       When the bundle is admitted in squeezed mode
       Then the autoscaler is suspended for the sandbox
       And the suspension is recorded in evidence
+
+  Rule: User-controlled clusters are registrable sandbox hosts
+    A developer or agent MUST be able to register a cluster they control as a
+    sandbox host. Sandboxes on it MUST hold the same seal and iteration
+    semantics as a sandbox on a managed cluster, and their evidence MUST be
+    marked as produced on a user-controlled cluster and MUST be neither
+    promotable nor postable as a check.
+
+    Scenario: A registered user-controlled cluster hosts sandboxes with identical seal semantics
+      Given a cluster the developer controls whose CNI enforces NetworkPolicy
+      When they register it as a sandbox host and create a sandbox on it
+      Then the sandbox enforces the same seal and iteration semantics as a sandbox on a managed cluster
+
+    Scenario: Evidence from a user-controlled cluster cannot reach a check or a promotion
+      Given evidence produced by a sandbox on a user-controlled cluster
+      When an evidence check is posted or a promotion is opened from it
+      Then the attempt is refused because the evidence source is not a control-plane-managed sandbox
+
+    Scenario: Evidence records that its cluster was user-controlled
+      Given a sandbox on a registered user-controlled cluster
+      When the run's evidence is assembled
+      Then the evidence records that it was produced on a user-controlled cluster
+
+  Rule: A sandbox host that cannot be shown to enforce NetworkPolicy is refused
+    Registration MUST confirm that the candidate cluster enforces
+    NetworkPolicy before accepting it as a sandbox host. A cluster that cannot
+    be shown to enforce MUST be refused, and the refusal MUST name unproven
+    enforcement as the cause rather than reporting a generic failure.
+
+    Scenario: A non-enforcing cluster is refused at registration
+      Given a cluster whose CNI does not enforce NetworkPolicy
+      When it is registered as a sandbox host
+      Then the registration is refused naming unproven network policy enforcement
+      And no sandbox can be created on it
+
+    Scenario: An enforcing cluster is accepted
+      Given a cluster whose CNI enforces NetworkPolicy
+      When it is registered as a sandbox host
+      Then the registration is accepted
 ```

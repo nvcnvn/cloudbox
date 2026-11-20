@@ -291,13 +291,19 @@ def step_impl(context):
 
 @given("a cluster whose CNI accepts but does not enforce NetworkPolicy")
 def step_impl(context):
-    context.platform.ensure_ready_platform(enforcing=False)
+    # Registration refuses a non-enforcing host, so the sandbox-creation probe
+    # (N7) is the last line for a host whose CNI stopped enforcing after it
+    # was registered.
+    context.platform.ensure_ready_platform(enforcing=True)
+    context.platform.stop_enforcing("main")
     context.app_name = context.applications.create("web")["name"]
 
 
 @when("setup or sandbox creation runs the enforcement probe")
 def step_impl(context):
-    context.sandbox_name = context.sandboxes.create(context.app_name)
+    # arrange=False: the host is already registered; re-registering it now
+    # would be refused, since its CNI stopped enforcing.
+    context.sandbox_name = context.sandboxes.create(context.app_name, arrange=False)
 
 
 @then("the probe detects that a denied connection was not denied")
@@ -322,6 +328,7 @@ def step_impl(context):
 @given("a cluster whose CNI enforces NetworkPolicy")
 def step_impl(context):
     context.platform.ensure_ready_platform(enforcing=True)
+    context.candidate_cluster = "main"
     context.app_name = context.applications.create("web")["name"]
 
 
@@ -348,6 +355,12 @@ def step_impl(context):
 
 @when("an operator reviews it")
 def step_impl(context):
+    # Shared phrasing: a documentation page under review (user-documentation)
+    # or the published containment statement (this capability).
+    page = getattr(context, "doc_under_review", None)
+    if page is not None:
+        context.reviewed_text = context.docs.text(page)
+        return
     context.containment_text = str(context.containment).lower()
 
 
@@ -368,3 +381,31 @@ def step_impl(context):
 @then('the word "unbypassable" appears nowhere in the claim')
 def step_impl(context):
     assert "unbypassable" not in context.containment_text
+
+# --- Containment names its destination-recording limit (add-local-agent-mvp 1.6) ---
+
+
+def _recording_limits(context):
+    limits = context.containment.get("recordingLimits") or []
+    assert limits, "the containment statement names no recording limit: %s" % context.containment
+    return " ".join(limits).lower()
+
+
+@then("egress that reaches the product's proxy is described as recorded by destination")
+def step_impl(context):
+    limits = _recording_limits(context)
+    assert "proxy" in limits and "recorded by destination" in limits, limits
+
+
+@then("egress that does not reach the proxy is described as denied without a recorded destination")
+def step_impl(context):
+    limits = _recording_limits(context)
+    assert "without its destination being recorded" in limits, limits
+
+
+@then("the blocked-attempt record is not presented as a complete account of denied egress")
+def step_impl(context):
+    limits = _recording_limits(context)
+    assert "not a complete account" in limits, limits
+    # Nothing else in the statement may claim every denial is recorded.
+    assert "denied and recorded" not in context.containment_text, context.containment_text

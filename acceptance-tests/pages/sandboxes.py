@@ -9,10 +9,10 @@ class SandboxesPage:
         self._platform = platform
         self.last_response = None
 
-    def create(self, app, owner=DEFAULT_DEV, local=False, ttl_seconds=0, expect_ok=True, arrange=True):
+    def create(self, app, owner=DEFAULT_DEV, ttl_seconds=0, expect_ok=True, arrange=True):
         if arrange:
             self._platform.ensure_ready_platform()
-        payload = {"app": app, "local": local}
+        payload = {"app": app}
         if ttl_seconds:
             payload["ttlSeconds"] = ttl_seconds
         # Creation seals and probe-verifies the namespace; on a real cluster
