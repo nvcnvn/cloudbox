@@ -22,7 +22,7 @@ ADR review completed for this change.
 
 ## New Durable ADRs Created
 
-- [`adr/0012-refusals-carry-a-stable-append-only-reason.md`](../../../adr/0012-refusals-carry-a-stable-append-only-reason.md)
+- [`adr/0012-refusals-carry-a-stable-append-only-reason.md`](../../../../adr/0012-refusals-carry-a-stable-append-only-reason.md)
   — every refusal names a reason from a closed, append-only catalog that the
   command line publishes, and programs branch on reasons, never on prose.
   This commitment binds every future change that adds a refusal.
