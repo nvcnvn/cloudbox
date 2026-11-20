@@ -64,6 +64,8 @@ func NewWithDriver(driver cluster.Driver) *Server {
 func (s *Server) reset(world *sim.World) {
 	s.world = world
 	s.core = core.New(world, world.Now)
+	// The sim world's arrangement surfaces are its integrations (ADR 0009).
+	s.core.SetIntegrations(core.Integrations{SourceControl: true, GitOps: true, ProductionIngest: true})
 }
 
 // simRoutes is the sim driver's test-arrangement surface (ADR 0007): conjure
@@ -87,6 +89,7 @@ func (s *Server) simRoutes() {
 	s.mux.HandleFunc("POST /simctl/audit-sink", s.simAuditSink)
 	s.mux.HandleFunc("POST /simctl/databases/{app}/{datastore}", s.simSeedDatabase)
 	s.mux.HandleFunc("POST /simctl/fail-migration", s.simFailMigration)
+	s.mux.HandleFunc("POST /simctl/integrations", s.simIntegrations)
 }
 
 func (s *Server) v1Routes() {
@@ -883,4 +886,30 @@ func (s *Server) simAuditSink(w http.ResponseWriter, r *http.Request) {
 	}
 	s.core.SetAuditSink(req.Available)
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// simIntegrations withdraws (or restores) integrations so a scenario can stand
+// up a released control plane under the sim driver (ADR 0009). Fields left
+// out keep their current value.
+func (s *Server) simIntegrations(w http.ResponseWriter, r *http.Request) {
+	req, ok := decode[struct {
+		SourceControl    *bool `json:"sourceControl"`
+		GitOps           *bool `json:"gitops"`
+		ProductionIngest *bool `json:"productionIngest"`
+	}](w, r)
+	if !ok {
+		return
+	}
+	in := s.core.Integrations()
+	if req.SourceControl != nil {
+		in.SourceControl = *req.SourceControl
+	}
+	if req.GitOps != nil {
+		in.GitOps = *req.GitOps
+	}
+	if req.ProductionIngest != nil {
+		in.ProductionIngest = *req.ProductionIngest
+	}
+	s.core.SetIntegrations(in)
+	writeJSON(w, 200, in)
 }

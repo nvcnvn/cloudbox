@@ -15,6 +15,7 @@ from pages.divergences import SimDivergencesPage
 from pages.docs import DocsPage
 from pages.kube import KubeClusterPage
 from pages.platform import PlatformPage
+from pages.release import ReleasePage
 from pages.runner import RunnerPage
 from pages.sandboxes import SandboxesPage
 from pages.scm import ScmPage
@@ -36,3 +37,4 @@ def attach(context):
     context.ci_config = CIConfigPage()
     context.sim_divergences = SimDivergencesPage()
     context.docs = DocsPage()
+    context.release = ReleasePage(context.api)

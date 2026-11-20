@@ -108,6 +108,9 @@ func (c *Core) ChecksFor(app, pr string) []PRCheck {
 func (c *Core) PostEvidenceCheck(sandboxName, pr string) (*PRCheck, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if err := c.requireIntegration(c.integrations.SourceControl, IntegrationSourceControl, "post an evidence check"); err != nil {
+		return nil, err
+	}
 	if err := c.requireManagedLocked(sandboxName, "post an evidence check"); err != nil {
 		return nil, err
 	}

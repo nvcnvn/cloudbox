@@ -113,6 +113,7 @@ func errf(status int, format string, args ...any) *Error {
 
 // Core is the whole control plane behind the HTTP surface.
 type Core struct {
+	integrations Integrations
 	mu     sync.Mutex
 	driver cluster.Driver
 	now    func() time.Time
@@ -178,6 +179,9 @@ func New(driver cluster.Driver, now func() time.Time) *Core {
 		databases:    map[string]*SimDatabase{},
 		profiles:     map[string]*DataProfile{},
 		auditAvailable: true,
+		// No integration is present until the deployment declares it
+		// (ADR 0009): a released control plane refuses rather than simulates.
+		integrations: Integrations{},
 	}
 }
 

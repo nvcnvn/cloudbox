@@ -60,6 +60,9 @@ func (c *Core) promotionMode(app *Application) string {
 
 // openPromotionLocked creates a pending promotion request. Callers hold c.mu.
 func (c *Core) openPromotionLocked(app *Application, sandbox, digest, openedBy string, evidence *Evidence, history *HistoryEntry) (*Promotion, error) {
+	if err := c.requireIntegration(c.integrations.GitOps, IntegrationGitOps, "open a promotion"); err != nil {
+		return nil, err
+	}
 	c.promotionSeq++
 	p := &Promotion{
 		ID: fmt.Sprintf("promo-%d", c.promotionSeq), App: app.Name,
@@ -78,6 +81,9 @@ func (c *Core) openPromotionLocked(app *Application, sandbox, digest, openedBy s
 func (c *Core) OpenPromotion(sandboxName, actor string) (*Promotion, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if err := c.requireIntegration(c.integrations.GitOps, IntegrationGitOps, "open a promotion"); err != nil {
+		return nil, err
+	}
 	if err := c.requireManagedLocked(sandboxName, "open a promotion"); err != nil {
 		return nil, err
 	}
