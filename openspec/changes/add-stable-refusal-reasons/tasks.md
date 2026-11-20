@@ -39,5 +39,5 @@ Standing constraints:
 
 ## 4. Completion
 
-- [ ] 4.1 `make lint-specs`, `make acceptance` and `make acceptance-specs` all pass: zero pending or undefined steps, HTML report generated
+- [x] 4.1 `make lint-specs`, `make acceptance` and `make acceptance-specs` all pass: zero pending or undefined steps, HTML report generated
 - [ ] 4.2 `make conformance` passes on Kind + Calico; the `enforcement-unproven` row is checked against the non-enforcing cluster there too
