@@ -52,11 +52,11 @@ that simulates.
 
 ## 3. The command line becomes the product
 
-- [ ] 3.1 control-plane: the command line may start and reuse a local control plane — start `cloudboxd` when none is addressed, reuse it across commands, and let an explicit `--server` always win. Enforcement stays server-side; the CLI links no `internal/core` — red → green → commit
-- [ ] 3.2 Record the daemon's build version in the local state file so a stale daemon from an older binary is replaced rather than reused. Resolve design Open Question 3 first: whether that file may also record registered clusters, or whether that crosses into the durable-state decision this change defers. Draw the line and state it
-- [ ] 3.3 developer-ergonomics: at the sandbox level the command line carries the whole loop — add the missing verbs to `cmd/cloudbox/` (declare application and contract, create sandbox, apply, run the declared suite, read evidence, destroy) alongside the existing `check`, `status`, `logs`, `exec`, `port-forward` — red → green → commit
-- [ ] 3.4 developer-ergonomics: command output is available as data and outcomes carry distinct exit statuses — add the structured rendering as a projection of the same server responses the human rendering uses (design D7: one surface, two projections), and give success, product refusal, and unreachable control plane distinct exit statuses — red → green → commit
-- [ ] 3.5 Verify the equivalence the spec asserts: for a sandbox with recorded blocked egress, the structured and human renderings carry the same facts. A structured rendering that carries *more* than the human one has become a second surface and must be corrected, not documented
+- [x] 3.1 control-plane: the command line may start and reuse a local control plane — start `cloudboxd` when none is addressed, reuse it across commands, and let an explicit `--server` always win. Enforcement stays server-side; the CLI links no `internal/core` — red → green → commit
+- [x] 3.2 Record the daemon's build version in the local state file so a stale daemon from an older binary is replaced rather than reused. Resolve design Open Question 3 first: whether that file may also record registered clusters, or whether that crosses into the durable-state decision this change defers. Draw the line and state it
+- [x] 3.3 developer-ergonomics: at the sandbox level the command line carries the whole loop — add the missing verbs to `cmd/cloudbox/` (declare application and contract, create sandbox, apply, run the declared suite, read evidence, destroy) alongside the existing `check`, `status`, `logs`, `exec`, `port-forward` — red → green → commit
+- [x] 3.4 developer-ergonomics: command output is available as data and outcomes carry distinct exit statuses — add the structured rendering as a projection of the same server responses the human rendering uses (design D7: one surface, two projections), and give success, product refusal, and unreachable control plane distinct exit statuses — red → green → commit
+- [x] 3.5 Verify the equivalence the spec asserts: for a sandbox with recorded blocked egress, the structured and human renderings carry the same facts. A structured rendering that carries *more* than the human one has become a second surface and must be corrected, not documented
 
 ## 4. Release engineering
 

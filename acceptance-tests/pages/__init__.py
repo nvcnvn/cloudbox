@@ -9,6 +9,7 @@ from pages.client import ApiClient, Cli
 from pages.applications import ApplicationsPage
 from pages.bundles import BundlesPage
 from pages.check import CheckPage
+from pages.cli import CliPage
 from pages.ci import CIConfigPage
 from pages.conformance import ConformanceSubsetPage
 from pages.divergences import SimDivergencesPage
@@ -38,3 +39,4 @@ def attach(context):
     context.sim_divergences = SimDivergencesPage()
     context.docs = DocsPage()
     context.release = ReleasePage(context.api)
+    context.cli_surface = CliPage(context.cli_path, context.base_url)

@@ -3,6 +3,7 @@
 package core
 
 import (
+	"cloudbox/internal/intake"
 	"fmt"
 	"sync"
 	"time"
@@ -24,24 +25,13 @@ func ProductCRDs() []cluster.CRD {
 	return crds
 }
 
-// Contract is the boundary contract (C1): the complete, finite set of values
-// allowed to differ per environment. Nothing else varies (C3).
-type Contract struct {
-	SecretNames      []string     `json:"secretNames"`
-	IngressHostnames []string     `json:"ingressHostnames"`
-	EgressAllowlist  []string     `json:"egressAllowlist"`
-	Dependencies     []Dependency `json:"dependencies"`
-}
-
-// Dependency is an internal application dependency (C1): a target Application
-// plus the alias hostname bundles use to reach it. In v1 a dependency may be
-// satisfied by an allowlisted stub endpoint, recorded as stubbed in evidence
-// (S8 v1 alternative).
-type Dependency struct {
-	App          string `json:"app"`
-	Alias        string `json:"alias,omitempty"`
-	StubEndpoint string `json:"stubEndpoint,omitempty"`
-}
+// Contract and Dependency are the boundary contract (C1). They live in the
+// intake package, which validates bundles against them, so the CLI's offline
+// check can share the analysis without linking the control plane (ADR 0004).
+type (
+	Contract   = intake.Contract
+	Dependency = intake.Dependency
+)
 
 // Policies are per-application operational policy (S5, S7, G4, D3, X4).
 type Policies struct {

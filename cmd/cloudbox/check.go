@@ -1,6 +1,7 @@
 // check (X3): the offline compatibility report — the first command in every
 // onboarding path. It is the one deliberate offline copy of intake analysis
-// (CP2); the server-side run at apply time remains authoritative.
+// (CP2), linked from package intake rather than the control plane; the
+// server-side run at apply time remains authoritative.
 package main
 
 import (
@@ -9,7 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"cloudbox/internal/core"
+	"cloudbox/internal/intake"
 )
 
 func runCheck(args []string) int {
@@ -44,7 +45,7 @@ func runCheck(args []string) int {
 		docs = append(docs, string(content))
 	}
 
-	objects, err := core.ParseManifests(strings.Join(docs, "\n---\n"))
+	objects, err := intake.ParseManifests(strings.Join(docs, "\n---\n"))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "check: %v\n", err)
 		return 1
@@ -53,7 +54,7 @@ func runCheck(args []string) int {
 	// No boundary contract is available offline: contract-dependent rules
 	// (undeclared secrets) are exactly why server-side intake stays
 	// authoritative.
-	analysis := core.AnalyzeManifests(objects, nil)
+	analysis := intake.AnalyzeManifests(objects, nil)
 
 	blockers := 0
 	for _, f := range analysis.Findings {
