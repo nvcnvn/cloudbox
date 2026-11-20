@@ -57,19 +57,20 @@ contract varies.
 
 ```sh
 cloudbox sandbox create -a web
-cloudbox apply -a web -s web-sbx-1 -f ./k8s/
+cloudbox apply -a web -s web-sbx-7f3a-1 -f examples/egress-demo/k8s/
 ```
 
-Use the sandbox name that `sandbox create` prints. `apply` takes a YAML file
-or a directory of them: the Kubernetes manifests you already have, with no
-CloudBox schema. Intake rejects what cannot run sealed and names the fix.
+Use the sandbox name that `sandbox create` prints. The example is a workload
+that fetches `http://example.com/` every ten seconds, a host the contract
+above does not allow. For your own application, point `-f` at the Kubernetes manifests
+you already have, a YAML file or a directory, with no CloudBox schema. Intake rejects what cannot run sealed and names the fix.
 `cloudbox check -f ./k8s/` runs the same analysis offline, before you start.
 
 ## 5. Run the suite, then see what was blocked
 
 ```sh
-cloudbox test -s web-sbx-1
-cloudbox status -s web-sbx-1 --explain
+cloudbox test -s web-sbx-7f3a-1
+cloudbox status -s web-sbx-7f3a-1 --explain
 ```
 
 `--explain` lists each blocked egress attempt that reached the egress proxy
@@ -80,17 +81,19 @@ the list is a floor, not a complete account.
 ## 6. Amend the declaration
 
 ```sh
-cloudbox app allow web api.stripe.com
+cloudbox app allow web example.com
 ```
 
 Nothing is ever allowed on the fly: you change the declaration, and the seal
-follows it.
+follows it. A running sandbox picks up the amended allowlist once Kubernetes
+syncs it into the egress proxy, usually within one to two minutes. Until then,
+attempts are still blocked and recorded.
 
 ## 7. Read the evidence, then clean up
 
 ```sh
-cloudbox evidence -s web-sbx-1
-cloudbox sandbox destroy -s web-sbx-1
+cloudbox evidence -s web-sbx-7f3a-1
+cloudbox sandbox destroy -s web-sbx-7f3a-1
 cloudbox server stop
 ```
 

@@ -47,12 +47,19 @@ networking:
 KIND
 fi
 
+# Remember the caller's current context: `kind export kubeconfig` switches it,
+# and creating a cluster should not silently retarget every later kubectl.
+previous_context="$(kubectl config current-context 2>/dev/null || true)"
+
 if [ -n "${KUBECONFIG_OUT:-}" ]; then
   mkdir -p "$(dirname "$KUBECONFIG_OUT")"
   kind get kubeconfig --name "$CLUSTER" > "$KUBECONFIG_OUT"
   export KUBECONFIG="$KUBECONFIG_OUT"
 else
   kind export kubeconfig --name "$CLUSTER" >/dev/null
+  if [ -n "$previous_context" ] && [ "$previous_context" != "kind-$CLUSTER" ]; then
+    kubectl config use-context "$previous_context" >/dev/null
+  fi
 fi
 CONTEXT="kind-$CLUSTER"
 
@@ -74,5 +81,5 @@ fi
 kubectl --context "$CONTEXT" -n kube-system rollout status daemonset/calico-node --timeout=300s
 kubectl --context "$CONTEXT" wait --for=condition=Ready nodes --all --timeout=300s
 
-echo "cluster '$CLUSTER' is ready; kube context: $CONTEXT"
+echo "cluster '$CLUSTER' is ready; kube context: $CONTEXT (your current context is unchanged)"
 echo "next: register it as a user-controlled sandbox host (see docs/cluster-setup.md)"

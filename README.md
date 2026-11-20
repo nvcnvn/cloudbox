@@ -11,15 +11,15 @@ claims more than was observed.
 ## The sealed-iteration loop
 
 ```sh
-cloudbox cluster register kind-cloudbox        # a cluster you control; enforcement is probed
-cloudbox app create web --allow api.github.com # declare the boundary contract
-cloudbox sandbox create -a web                 # sealed before anything runs
-cloudbox apply -a web -s web-sbx-1 -f ./k8s/   # the YAML you already have
-cloudbox test -s web-sbx-1                     # the declared suite, witnessed
-cloudbox status -s web-sbx-1 --explain         # what was blocked, and a proposed fix
-cloudbox app allow web api.stripe.com          # amend the declaration, never the seal
-cloudbox evidence -s web-sbx-1                 # the record of the run
-cloudbox sandbox destroy -s web-sbx-1
+cloudbox cluster register kind-cloudbox           # a cluster you control; enforcement is probed
+cloudbox app create web --allow api.github.com    # declare the boundary contract
+cloudbox sandbox create -a web                    # sealed before anything runs
+cloudbox apply -a web -s web-sbx-7f3a-1 -f ./k8s/ # the YAML you already have
+cloudbox test -s web-sbx-7f3a-1                   # the declared suite, witnessed
+cloudbox status -s web-sbx-7f3a-1 --explain       # what was blocked, and a proposed fix
+cloudbox app allow web api.stripe.com             # amend the declaration, never the seal
+cloudbox evidence -s web-sbx-7f3a-1               # the record of the run
+cloudbox sandbox destroy -s web-sbx-7f3a-1
 ```
 
 Every command takes `-o json`, and exit statuses separate success, a refusal,

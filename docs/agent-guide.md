@@ -27,7 +27,7 @@ admitted. If `.sealed` is false, stop: the host failed its enforcement probe.
 ## 3. Apply
 
 ```sh
-cloudbox -o json apply -a web -s web-sbx-1 -f ./k8s/
+cloudbox -o json apply -a web -s web-sbx-7f3a-1 -f ./k8s/
 ```
 
 A refusal (exit `1`) carries `findings`. Each one names the manifest and the
@@ -36,7 +36,7 @@ fix. Fix the manifests rather than retrying.
 ## 4. Test
 
 ```sh
-cloudbox -o json test -s web-sbx-1
+cloudbox -o json test -s web-sbx-7f3a-1
 ```
 
 ## 5. Explain
@@ -45,12 +45,12 @@ When a test fails because something could not be reached, ask what was
 blocked:
 
 ```sh
-cloudbox -o json status -s web-sbx-1 --explain
+cloudbox -o json status -s web-sbx-7f3a-1 --explain
 ```
 
 ```json
 {
-  "sandbox": "web-sbx-1",
+  "sandbox": "web-sbx-7f3a-1",
   "state": "ready",
   "sealed": true,
   "blockedEgress": [
@@ -77,12 +77,14 @@ Never work around the seal.
 cloudbox -o json app allow web api.stripe.com
 ```
 
-Then re-apply and re-test.
+The running sandbox picks up the amended allowlist once Kubernetes syncs it
+into the egress proxy, usually within one to two minutes. Re-run the suite after that, and
+expect attempts made before it to stay in `blockedEgress`.
 
 ## 7. Read evidence
 
 ```sh
-cloudbox -o json evidence -s web-sbx-1
+cloudbox -o json evidence -s web-sbx-7f3a-1
 ```
 
 Report what `.summary` says, not more. Evidence never says "verified
@@ -92,7 +94,7 @@ registered. `.source` is `user-controlled` on a cluster you registered.
 ## 8. Destroy
 
 ```sh
-cloudbox -o json sandbox destroy -s web-sbx-1
+cloudbox -o json sandbox destroy -s web-sbx-7f3a-1
 ```
 
 Evidence lives in the local control plane until it stops. Keep the output of
