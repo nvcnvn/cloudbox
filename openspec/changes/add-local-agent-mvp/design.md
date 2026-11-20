@@ -325,12 +325,18 @@ removes.
    of control-plane state that can disagree with the cluster. It belongs with
    the CRD-versus-database decision this change defers. The cost is the
    documented one: after a restart, the agent re-registers.
-4. **Do any of this change's new rules belong in the `@conformance` subset?**
-   Enforcement refusal at registration (D2) is genuinely cluster-dependent and
-   arguably must be proven against the non-enforcing cluster CI already stands
-   up; the rest is control-plane logic. If any are tagged,
-   `acceptance-tests/CONFORMANCE.md` gains rows and its recorded-exclusion
-   table must stay accurate.
+4. **Resolved (2026-11-20): two rules join the `@conformance` subset, both
+   through the `kube-driver` delta.** (a) Registration refuses a non-enforcing
+   host. This is the real-cluster scenario of the MODIFIED non-enforcing-CNI
+   rule, asserted against the deliberately non-enforcing Kind cluster CI
+   already stands up. (b) An unpullable egress proxy is reported and
+   allowlisted egress fails closed. This is new kube-driver code (progress
+   deadline, availability read, fail-closed evaluation) that only a real
+   cluster exercises. Everything else in this change (parity state, refusals,
+   CLI surface, version stamping, containment wording) is control-plane logic,
+   and the sim proves it as well as a cluster would. The pinned-reference
+   scenario is recorded as an exclusion in `acceptance-tests/CONFORMANCE.md`
+   until the release job has published an image a CI cluster can pull.
 5. **Carried forward from `add-cloudbox-v1` Open Question 1 (evidence retention
    and GC).** A local release makes it less pressing — evidence dies with the
    daemon — but that *is* a retention policy, and it should be stated as one in

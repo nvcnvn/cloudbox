@@ -17,6 +17,12 @@ a cluster's enforcement after registration. A real CI cluster cannot do that
 without reinstalling its CNI mid-run, and the divergence is recorded in
 `internal/sim/DIVERGENCES.md`.
 
+The second rule proves on real infrastructure what `release-integrity` states
+for every driver: an egress proxy that cannot be pulled is reported, and the
+allowlist it would have enforced fails closed. The simulation models the pull
+failure; only a real cluster shows the Deployment's progress deadline expiring
+and a real workload's request finding no proxy to reach.
+
 ```gherkin
 @conformance
 Feature: Kube driver changes
@@ -35,4 +41,18 @@ Feature: Kube driver changes
       When it is registered as a sandbox host
       Then the registration is refused naming unproven network policy enforcement
       And no sandbox can be created on it
+
+  # @openspec: ADDED
+  Rule: An egress proxy that cannot be pulled leaves allowlisted egress denied on a real cluster
+    When a sealed namespace's egress proxy cannot be pulled, the driver MUST
+    let the control plane report it unavailable, naming the image, within the
+    proxy's progress deadline, and a real workload's request to an allowlisted
+    destination MUST fail rather than leave the namespace unmediated.
+
+    Scenario: An unpullable proxy image is reported and allowlisted egress fails closed
+      Given a sealed sandbox on a real cluster whose allowlist declares one external endpoint
+      When its egress proxy is redeployed from an image the cluster cannot pull
+      Then the sandbox reports the egress proxy unavailable naming that image
+      And the sandbox is not reported as enforcing its allowlist
+      And a workload's request to the declared endpoint fails
 ```
