@@ -1,8 +1,27 @@
-.PHONY: build acceptance acceptance-specs lint-specs conformance
+.PHONY: build release-binaries acceptance acceptance-specs lint-specs conformance
+
+# The release process stamps the build (release-integrity): the version that
+# identifies it, and the digest-pinned egress proxy image it deploys. Anything
+# built without these reports itself as unreleased.
+VERSION ?=
+PROXY_IMAGE ?=
+OUT ?= dist
+GOOS ?= $(shell go env GOOS)
+GOARCH ?= $(shell go env GOARCH)
 
 build:
 	go build -o bin/cloudboxd ./cmd/cloudboxd
 	go build -o bin/cloudbox ./cmd/cloudbox
+
+release-binaries:
+	@test -n "$(VERSION)" || { echo "VERSION is required (e.g. v0.1.0)"; exit 2; }
+	@echo "$(PROXY_IMAGE)" | grep -q '@sha256:' || { echo "PROXY_IMAGE must be digest-pinned (repo@sha256:...)"; exit 2; }
+	@mkdir -p $(OUT)
+	for bin in cloudbox cloudboxd; do \
+		CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build -trimpath \
+			-ldflags "-X cloudbox/internal/release.Version=$(VERSION) -X cloudbox/internal/release.ProxyImage=$(PROXY_IMAGE)" \
+			-o $(OUT)/$$bin ./cmd/$$bin; \
+	done
 
 # The effective spec: source of truth + active change deltas (the default run).
 acceptance:

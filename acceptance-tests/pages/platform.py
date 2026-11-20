@@ -55,6 +55,10 @@ class PlatformPage:
         resp.raise_for_status()
         return resp
 
+    def make_registry_unreachable(self, cluster):
+        """Sim-only: the cluster cannot pull the release's egress proxy image."""
+        self._api.post("/simctl/clusters/%s/registry" % cluster, json={"reachable": False}).raise_for_status()
+
     def stop_enforcing(self, cluster):
         """Sim-only: the cluster's CNI stops enforcing after registration (a
         CNI replaced underneath the control plane). A real CI cluster cannot

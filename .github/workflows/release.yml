@@ -1,0 +1,69 @@
+# The release process (release-integrity, design Open Question 2): on a version
+# tag, publish the egress proxy image to GHCR as a multi-arch manifest list,
+# then build both binaries stamped with the version and the pushed DIGEST, so
+# a released binary can only ever deploy the image it was released with.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write   # create the GitHub release
+  packages: write   # push to ghcr.io with GITHUB_TOKEN
+
+env:
+  IMAGE: ghcr.io/${{ github.repository_owner }}/cloudbox-egress-proxy
+
+jobs:
+  proxy-image:
+    runs-on: ubuntu-latest
+    outputs:
+      digest: ${{ steps.push.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: build/proxy.Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ env.IMAGE }}:${{ github.ref_name }}
+
+  binaries:
+    needs: proxy-image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Build stamped binaries for every supported platform
+        env:
+          PROXY_IMAGE: ${{ env.IMAGE }}@${{ needs.proxy-image.outputs.digest }}
+        run: |
+          for platform in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64; do
+            os="${platform%/*}"; arch="${platform#*/}"
+            out="dist/cloudbox_${GITHUB_REF_NAME}_${os}_${arch}"
+            make release-binaries VERSION="$GITHUB_REF_NAME" PROXY_IMAGE="$PROXY_IMAGE" \
+              GOOS="$os" GOARCH="$arch" OUT="$out"
+            tar -C "$out" -czf "$out.tar.gz" cloudbox cloudboxd
+          done
+          (cd dist && sha256sum *.tar.gz > SHA256SUMS)
+      - name: Verify the stamp before publishing
+        run: |
+          out="dist/cloudbox_${GITHUB_REF_NAME}_linux_amd64"
+          "$out/cloudboxd" --version | grep -qx "cloudboxd $GITHUB_REF_NAME"
+          "$out/cloudboxd" --version | grep -q "@sha256:"
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release create "$GITHUB_REF_NAME" dist/*.tar.gz dist/SHA256SUMS --generate-notes

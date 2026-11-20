@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"cloudbox/internal/cluster"
+	"cloudbox/internal/release"
 )
 
 // BlockedAttempt is one recorded, attributed denied egress attempt (N4).
@@ -37,6 +38,11 @@ type Sandbox struct {
 	// UserControlled: the host is a cluster the developer or agent controls,
 	// so evidence from it is non-promotable and non-postable (ADR 0004, 0010).
 	UserControlled bool `json:"userControlled"`
+	// EgressProxy is the allowlist's enforcement point; AllowlistEnforced is
+	// true only while it is available. Default-deny holds without the proxy,
+	// the FQDN allowlist does not (release-integrity).
+	EgressProxy       *ProxyStatus `json:"egressProxy,omitempty"`
+	AllowlistEnforced bool         `json:"allowlistEnforced"`
 	State         string `json:"state"` // "provisioning" | "ready" | "unsealed-cluster-not-enforcing" | "destroyed"
 	Sealed        bool   `json:"sealed"`
 	SealVerified  bool   `json:"sealVerified"`
@@ -204,6 +210,7 @@ func (c *Core) sealSandboxLocked(sb *Sandbox, app *Application, host cluster.Clu
 	sb.Sealed = true
 	sb.SealVerified = true
 	sb.State = "ready"
+	c.refreshProxyLocked(sb)
 }
 
 // CompleteSeal finishes a held provisioning (sim arrangement for N1).
@@ -267,6 +274,81 @@ func (c *Core) Tick() {
 	}
 }
 
+// ProxyStatus is what the cluster shows of a sandbox's egress proxy.
+type ProxyStatus struct {
+	Image  string `json:"image"`
+	State  string `json:"state"` // "available" | "pending" | "unavailable"
+	Reason string `json:"reason,omitempty"`
+}
+
+// refreshProxyLocked reads the proxy Deployment the driver deployed at seal
+// time and reconciles the record with it; on a real cluster an image pull
+// fails after admission, so this runs on reads too. Callers hold c.mu.
+func (c *Core) refreshProxyLocked(sb *Sandbox) {
+	if !sb.Sealed || sb.State == "destroyed" {
+		return
+	}
+	host, ok := c.driver.Cluster(sb.Cluster)
+	if !ok {
+		return
+	}
+	obj, ok := host.GetRaw(sb.Namespace, "Deployment", release.ProxyName)
+	if !ok {
+		sb.EgressProxy = &ProxyStatus{Image: release.EgressProxyImage(), State: "unavailable",
+			Reason: "the egress proxy was not deployed"}
+		sb.AllowlistEnforced = false
+		return
+	}
+	st := proxyStatusOf(obj)
+	sb.EgressProxy = &st
+	sb.AllowlistEnforced = st.State == "available"
+}
+
+func proxyStatusOf(obj cluster.Object) ProxyStatus {
+	st := ProxyStatus{State: "pending"}
+	if spec, ok := obj.Manifest["spec"].(map[string]any); ok {
+		if tmpl, ok := spec["template"].(map[string]any); ok {
+			if pod, ok := tmpl["spec"].(map[string]any); ok {
+				if cs, ok := pod["containers"].([]any); ok && len(cs) > 0 {
+					if c0, ok := cs[0].(map[string]any); ok {
+						st.Image, _ = c0["image"].(string)
+					}
+				}
+			}
+		}
+	}
+	status, _ := obj.Manifest["status"].(map[string]any)
+	if n, ok := asInt(status["availableReplicas"]); ok && n > 0 {
+		st.State = "available"
+		return st
+	}
+	conds, _ := status["conditions"].([]any)
+	for _, raw := range conds {
+		cond, _ := raw.(map[string]any)
+		if cond["type"] == "Progressing" && cond["status"] == "False" {
+			st.State = "unavailable"
+			st.Reason = fmt.Sprintf(
+				"egress proxy image %s could not be provisioned (%v); allowlisted egress is denied until it is",
+				st.Image, cond["reason"])
+			return st
+		}
+	}
+	st.Reason = "egress proxy " + st.Image + " is starting; allowlisted egress is denied until it is available"
+	return st
+}
+
+func asInt(v any) (int64, bool) {
+	switch n := v.(type) {
+	case int:
+		return int64(n), true
+	case int64:
+		return n, true
+	case float64:
+		return int64(n), true
+	}
+	return 0, false
+}
+
 // GetSandbox returns a sandbox record.
 func (c *Core) GetSandbox(name string) (*Sandbox, error) {
 	c.mu.Lock()
@@ -277,6 +359,7 @@ func (c *Core) GetSandbox(name string) (*Sandbox, error) {
 	}
 	c.refreshObservedDiagnosticsLocked(sb)
 	c.refreshBlockedEgressLocked(sb)
+	c.refreshProxyLocked(sb)
 	return sb, nil
 }
 

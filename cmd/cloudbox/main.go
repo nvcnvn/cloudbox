@@ -7,11 +7,13 @@ package main
 import (
 	"fmt"
 	"os"
+
+	"cloudbox/internal/release"
 )
 
-// version identifies the build (release-integrity); the release process
-// stamps it, and anything else reports itself as unreleased.
-var version = "unreleased"
+// version identifies the build (release-integrity), stamped by the release
+// process; anything else reports itself as unreleased.
+var version = release.Version
 
 const usage = `cloudbox — sealed, production-shaped sandboxes with honest evidence
 
@@ -79,7 +81,7 @@ parsed:
 	case "server":
 		return runServer(c, args[1:])
 	case "version":
-		return c.emit((&view{}).add("version", version))
+		return c.emit((&view{}).add("version", release.Describe()).add("released", release.Released()))
 	}
 	fmt.Fprintf(os.Stderr, "cloudbox: unknown command %q\n\n%s", args[0], usage)
 	return exitUsage

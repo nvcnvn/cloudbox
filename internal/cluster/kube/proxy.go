@@ -11,7 +11,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"log"
-	"os"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -21,15 +20,26 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	"cloudbox/internal/cluster"
+	"cloudbox/internal/release"
 )
 
-// proxyImage is provisioned into the conformance clusters by
-// hack/conformance/*.sh (built from cmd/cloudbox-proxy).
-func proxyImage() string {
-	if img := os.Getenv("CLOUDBOX_PROXY_IMAGE"); img != "" {
-		return img
-	}
-	return "cloudbox-egress-proxy:dev"
+// proxyImage is the release's pinned reference (internal/release): a released
+// build deploys the digest the release job pushed; an unreleased one deploys
+// the locally loaded :dev image and says so.
+func proxyImage() string { return release.EgressProxyImage() }
+
+// proxyProgressDeadline bounds how long an unpullable proxy image reads as
+// "pending" before the Deployment reports ProgressDeadlineExceeded and the
+// sandbox reports the proxy unavailable (release-integrity).
+const proxyProgressDeadline = int32(60)
+
+// proxyAvailable reports whether the namespace's egress proxy has a ready
+// replica. Without one, the allowlist has no enforcement point.
+func (c *Cluster) proxyAvailable(namespace string) bool {
+	cctx, cancel := ctx()
+	defer cancel()
+	d, err := c.clientset.AppsV1().Deployments(namespace).Get(cctx, proxyName, metav1.GetOptions{})
+	return err == nil && d.Status.AvailableReplicas > 0
 }
 
 // ensureAdminToken creates the namespace's admin credential if it is absent
@@ -122,7 +132,8 @@ func (c *Cluster) deployEgressProxy(namespace string) {
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{Name: proxyName, Namespace: namespace, Labels: labels},
 		Spec: appsv1.DeploymentSpec{
-			Replicas: &replicas,
+			Replicas:                &replicas,
+			ProgressDeadlineSeconds: ptrInt32(proxyProgressDeadline),
 			Selector: &metav1.LabelSelector{MatchLabels: labels},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{Labels: labels},
@@ -326,3 +337,5 @@ func (c *Cluster) EgressAttempts(namespace string) cluster.EgressReport {
 
 // The optional capability is actually satisfied.
 var _ cluster.EgressObserver = (*Cluster)(nil)
+
+func ptrInt32(v int32) *int32 { return &v }
