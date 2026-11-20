@@ -262,10 +262,9 @@ SPEC_COMMANDS = {
 GLOBAL_OPTIONS = {"--server", "--as", "-o", "--output"}
 LOOP_STAGES = ["declare", "create", "apply", "test", "explain", "amend", "evidence", "destroy"]
 
-# Troubleshooting outcome (spec Examples) -> its entry's heading phrase.
+# Troubleshooting outcome that is not a refusal (spec Examples) -> its entry's
+# heading phrase. Refusal entries are keyed by reason code instead.
 OUTCOMES = {
-    "a cluster refused for unproven enforcement": "unproven network policy enforcement",
-    "an operation refused for a missing integration": "no integration configured",
     "an egress proxy reported unavailable": "egress proxy unavailable",
     "substrate parity reported unverified": "substrate parity unverified",
     "an unreachable control plane": "control plane unreachable",
