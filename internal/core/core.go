@@ -3,6 +3,8 @@
 package core
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"cloudbox/internal/intake"
 	"fmt"
 	"sync"
@@ -136,6 +138,11 @@ type Core struct {
 	auditAvailable bool
 	promotionSeq   int
 	sandboxSeq     int
+	// incarnation distinguishes this control plane's sandbox names from any
+	// earlier one's. State is in memory, so the sequence restarts at 1 after a
+	// restart; without this, a new sandbox could be named after (and land in
+	// the namespace of) a sandbox an earlier control plane left on the cluster.
+	incarnation string
 	holdSeal       bool // sim arrangement: leave the next sandbox provisioning (N1)
 }
 
@@ -171,6 +178,7 @@ func New(driver cluster.Driver, now func() time.Time) *Core {
 		databases:    map[string]*SimDatabase{},
 		profiles:     map[string]*DataProfile{},
 		auditAvailable: true,
+		incarnation:    newIncarnation(),
 		// No integration is present until the deployment declares it
 		// (ADR 0009): a released control plane refuses rather than simulates.
 		integrations: Integrations{},
@@ -354,4 +362,13 @@ func (c *Core) SetSecretValue(appName, environment, name string) error {
 // environment. Callers hold c.mu.
 func (c *Core) hasSecretValue(appName, environment, name string) bool {
 	return c.secretValues[appName][environment][name]
+}
+
+// newIncarnation is a short random tag for this control plane's lifetime.
+func newIncarnation() string {
+	buf := make([]byte, 2)
+	if _, err := rand.Read(buf); err != nil {
+		return fmt.Sprintf("%04x", time.Now().UnixNano()&0xffff)
+	}
+	return hex.EncodeToString(buf)
 }

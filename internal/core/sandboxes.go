@@ -154,7 +154,7 @@ func (c *Core) createSandboxLocked(appName, actor string, opts CreateSandboxOpti
 
 	start := c.now()
 	c.sandboxSeq++
-	name := fmt.Sprintf("%s-sbx-%d", appName, c.sandboxSeq)
+	name := fmt.Sprintf("%s-sbx-%s-%d", appName, c.incarnation, c.sandboxSeq)
 
 	// The product does not create clusters (ADR 0010): every sandbox lands on
 	// a registered host, and whether that host is user-controlled is a
