@@ -400,6 +400,10 @@ def step_impl(context):
 
 @given("a cluster whose CNI does not enforce NetworkPolicy")
 def step_impl(context):
+    if context.driver == "kube":
+        # The conformance run's deliberately non-enforcing Kind cluster.
+        context.candidate_cluster = context.kube_nonenforcing.name
+        return
     context.candidate_cluster = context.platform.ensure_cluster("unenforced-host", enforcing=False)
 
 

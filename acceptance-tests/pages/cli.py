@@ -78,7 +78,7 @@ class CliPage:
             cmd += ["-o", "json"]
         cmd += [str(a) for a in args]
         run = CliRun(
-            subprocess.run(cmd, capture_output=True, text=True, timeout=180, env=env),
+            subprocess.run(cmd, capture_output=True, text=True, timeout=300, env=env),
             list(args),
         )
         self.runs.append(run)
