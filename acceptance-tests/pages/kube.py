@@ -232,13 +232,19 @@ class KubeClusterPage:
                 "then echo READ:ALLOWED; else echo READ:REFUSED; fi"
                 % {"host": target, "port": PROXY_ADMIN_PORT}
             )
-            run = self._kubectl(
+            # Not --attach: a pod that finishes before the attach connects
+            # loses its output, which read as an empty (failed) probe. Wait for
+            # the pod to complete, then read its own log.
+            self._kubectl(
                 "run", "outsider", "-n", scratch, "--image", "busybox:1.36",
-                "--restart=Never", "--attach", "--rm", "--quiet",
-                "--command", "--", "sh", "-c", script,
+                "--restart=Never", "--command", "--", "sh", "-c", script,
+            ).check_returncode()
+            self._kubectl(
+                "wait", "-n", scratch, "pod/outsider",
+                "--for=jsonpath={.status.phase}=Succeeded", "--timeout=240s",
                 timeout=300,
-            )
-            return run.stdout
+            ).check_returncode()
+            return self._kubectl("logs", "-n", scratch, "outsider").stdout
         finally:
             self._kubectl("delete", "namespace", scratch, "--wait=false")
 
