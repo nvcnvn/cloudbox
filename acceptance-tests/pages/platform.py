@@ -46,6 +46,15 @@ class PlatformPage:
         refused when the cluster cannot be shown to enforce NetworkPolicy."""
         return self._api.post("/v1/clusters/register", json={"cluster": cluster, "role": "sandbox"}, timeout=300)
 
+    def register_user_controlled_host(self, cluster):
+        resp = self._api.post(
+            "/v1/clusters/register",
+            json={"cluster": cluster, "role": "sandbox", "userControlled": True},
+            timeout=300,
+        )
+        resp.raise_for_status()
+        return resp
+
     def stop_enforcing(self, cluster):
         """Sim-only: the cluster's CNI stops enforcing after registration (a
         CNI replaced underneath the control plane). A real CI cluster cannot

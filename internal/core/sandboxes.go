@@ -34,7 +34,9 @@ type Sandbox struct {
 	Owner         string `json:"owner"`
 	Cluster       string `json:"cluster"`
 	Namespace     string `json:"namespace"`
-	Local         bool   `json:"local"` // user-controlled cluster (S3)
+	// UserControlled: the host is a cluster the developer or agent controls,
+	// so evidence from it is non-promotable and non-postable (ADR 0004, 0010).
+	UserControlled bool `json:"userControlled"`
 	State         string `json:"state"` // "provisioning" | "ready" | "unsealed-cluster-not-enforcing" | "destroyed"
 	Sealed        bool   `json:"sealed"`
 	SealVerified  bool   `json:"sealVerified"`
@@ -126,7 +128,6 @@ func (c *Core) sandboxHost(app *Application) (cluster.Cluster, error) {
 
 // CreateSandboxOptions vary one creation.
 type CreateSandboxOptions struct {
-	Local      bool
 	TTLSeconds int64
 	PR         string
 	Agent      bool
@@ -149,21 +150,12 @@ func (c *Core) createSandboxLocked(appName, actor string, opts CreateSandboxOpti
 	c.sandboxSeq++
 	name := fmt.Sprintf("%s-sbx-%d", appName, c.sandboxSeq)
 
-	var host cluster.Cluster
-	if opts.Local {
-		// S3: one command provisions a local (user-controlled) cluster from
-		// the application's substrate lockfile; same seal semantics.
-		local, err := c.provisionLocalCluster(name, appName)
-		if err != nil {
-			return nil, err
-		}
-		host = local
-	} else {
-		var err error
-		host, err = c.sandboxHost(app)
-		if err != nil {
-			return nil, err
-		}
+	// The product does not create clusters (ADR 0010): every sandbox lands on
+	// a registered host, and whether that host is user-controlled is a
+	// property of its registration.
+	host, err := c.sandboxHost(app)
+	if err != nil {
+		return nil, err
 	}
 
 	sb := &Sandbox{
@@ -172,7 +164,7 @@ func (c *Core) createSandboxLocked(appName, actor string, opts CreateSandboxOpti
 		Owner:        actor,
 		Cluster:      host.Name(),
 		Namespace:    name,
-		Local:        opts.Local,
+		UserControlled: host.UserControlled() || c.userControlled[host.Name()],
 		State:        "provisioning",
 		CreatedAt:    start,
 		LastActivity: start,

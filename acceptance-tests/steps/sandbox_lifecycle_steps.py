@@ -101,60 +101,6 @@ def step_impl(context):
 # --- S3: local sandboxes (task 3.3) ---
 
 
-@given("an application with a substrate lockfile")
-def step_impl(context):
-    context.platform.ensure_ready_platform()
-    context.app_name = context.applications.create("web")["name"]
-    context.lockfile = context.api.get(
-        "/v1/applications/%s/substrate-lockfile" % context.app_name
-    ).json()
-
-
-@when("the developer creates a sandbox with the local option")
-def step_impl(context):
-    context.sandbox_name = context.sandboxes.create(context.app_name, local=True)
-
-
-@then("a local Kind cluster is provisioned from the lockfile")
-def step_impl(context):
-    record = context.sandboxes.record(context.sandbox_name).json()
-    assert record["local"] and record["cluster"].startswith("kind-"), record
-    evidence = context.sandboxes.evidence(context.sandbox_name)
-    assert evidence["substrateDigest"] == context.lockfile["digest"], (
-        "local substrate %s != lockfile %s" % (evidence["substrateDigest"], context.lockfile["digest"])
-    )
-
-
-@then("the sandbox enforces the same seal and iteration semantics as a managed sandbox")
-def step_impl(context):
-    record = context.sandboxes.record(context.sandbox_name).json()
-    assert record["sealed"] and record["sealVerified"], record
-    attempt = context.api.post(
-        "/simctl/sandboxes/%s/egress-attempts" % context.sandbox_name,
-        json={"workload": "web", "destination": "api.undeclared-vendor.com"},
-    ).json()
-    assert not attempt["allowed"], "the local seal must deny undeclared egress"
-
-
-@given("evidence produced by a local sandbox")
-def step_impl(context):
-    context.platform.ensure_ready_platform()
-    context.app_name = context.applications.create("web")["name"]
-    context.sandbox_name = context.sandboxes.create(context.app_name, local=True)
-    context.bundles.apply(context.app_name, context.sandbox_name, context.bundles.plain_mixed_manifests())
-    context.bundles.last_response.raise_for_status()
-
-
-@when("the developer attempts to post an evidence check or open a promotion from it")
-def step_impl(context):
-    context.check_attempt = context.api.post(
-        "/v1/evidence-checks", json={"sandbox": context.sandbox_name, "pr": "42"}
-    )
-    context.promote_attempt = context.api.post(
-        "/v1/promotions", json={"sandbox": context.sandbox_name}
-    )
-
-
 @then("the attempt is refused because the evidence source is not a control-plane-managed sandbox")
 def step_impl(context):
     for attempt in (context.check_attempt, context.promote_attempt):
@@ -483,3 +429,72 @@ def step_impl(context):
 @then("the registration is accepted")
 def step_impl(context):
     assert context.registration.ok, context.registration.text
+
+
+# --- User-controlled clusters are registrable sandbox hosts (add-local-agent-mvp 2.3) ---
+
+USER_CONTROLLED = "user-controlled"
+
+
+def _user_controlled_sandbox(context):
+    cluster = context.platform.ensure_cluster("dev-cluster", enforcing=True)
+    context.platform.run_setup(cluster).raise_for_status()
+    context.platform.register_user_controlled_host(cluster)
+    context.app_name = context.applications.create("web", sandboxCluster=cluster)["name"]
+    context.sandbox_name = context.sandboxes.create(context.app_name, arrange=False)
+    context.bundles.apply(context.app_name, context.sandbox_name, context.bundles.plain_mixed_manifests())
+    context.bundles.last_response.raise_for_status()
+
+
+@given("a cluster the developer controls whose CNI enforces NetworkPolicy")
+def step_impl(context):
+    pass  # arranged by the When: registration is the act under test
+
+
+@when("they register it as a sandbox host and create a sandbox on it")
+def step_impl(context):
+    _user_controlled_sandbox(context)
+
+
+@then("the sandbox enforces the same seal and iteration semantics as a sandbox on a managed cluster")
+def step_impl(context):
+    record = context.sandboxes.record(context.sandbox_name).json()
+    assert record["sealed"] and record["sealVerified"], record
+    assert record["userControlled"], record
+    attempt = context.api.post(
+        "/simctl/sandboxes/%s/egress-attempts" % context.sandbox_name,
+        json={"workload": "web", "destination": "api.undeclared-vendor.com"},
+    ).json()
+    assert not attempt["allowed"], "the seal must deny undeclared egress on a user-controlled host"
+    explained = context.sandboxes.explain(context.sandbox_name)
+    assert "api.undeclared-vendor.com" in str(explained), explained
+
+
+@given("evidence produced by a sandbox on a user-controlled cluster")
+def step_impl(context):
+    _user_controlled_sandbox(context)
+
+
+@when("an evidence check is posted or a promotion is opened from it")
+def step_impl(context):
+    context.check_attempt = context.api.post(
+        "/v1/evidence-checks", json={"sandbox": context.sandbox_name, "pr": "42"}
+    )
+    context.promote_attempt = context.api.post(
+        "/v1/promotions", json={"sandbox": context.sandbox_name}
+    )
+
+
+@given("a sandbox on a registered user-controlled cluster")
+def step_impl(context):
+    _user_controlled_sandbox(context)
+
+
+@when("the run's evidence is assembled")
+def step_impl(context):
+    context.evidence = context.sandboxes.evidence(context.sandbox_name)
+
+
+@then("the evidence records that it was produced on a user-controlled cluster")
+def step_impl(context):
+    assert context.evidence["source"] == USER_CONTROLLED, context.evidence

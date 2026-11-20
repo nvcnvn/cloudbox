@@ -335,13 +335,14 @@ func (s *Server) setup(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) registerCluster(w http.ResponseWriter, r *http.Request) {
 	req, ok := decode[struct {
-		Cluster string `json:"cluster"`
-		Role    string `json:"role"`
+		Cluster        string `json:"cluster"`
+		Role           string `json:"role"`
+		UserControlled bool   `json:"userControlled"`
 	}](w, r)
 	if !ok {
 		return
 	}
-	if err := s.core.RegisterCluster(req.Cluster, req.Role); err != nil {
+	if err := s.core.RegisterCluster(req.Cluster, req.Role, req.UserControlled); err != nil {
 		writeErr(w, err)
 		return
 	}
@@ -446,8 +447,14 @@ func (s *Server) createSandbox(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if req.Local {
+		// The removed local option is refused by name rather than ignored, so
+		// a caller never gets a sandbox somewhere it did not ask for.
+		writeJSON(w, 400, map[string]string{"error": "the local option was removed: the product does not create clusters; register a cluster you control as a sandbox host (userControlled) and create the sandbox there (ADR 0010)"})
+		return
+	}
 	sb, err := s.core.CreateSandbox(req.App, actor(r), core.CreateSandboxOptions{
-		Local: req.Local, TTLSeconds: req.TTLSeconds, Agent: req.Agent,
+		TTLSeconds: req.TTLSeconds, Agent: req.Agent,
 	})
 	if err != nil {
 		writeErr(w, err)

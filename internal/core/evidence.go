@@ -34,7 +34,7 @@ type DependencyStatus struct {
 // Evidence is the (growing) record of one sandbox's current run.
 type Evidence struct {
 	Sandbox      string      `json:"sandbox"`
-	Source       string      `json:"source"` // "managed" | "local" (S3/CP4 trust boundary)
+	Source       string      `json:"source"` // "managed" | "user-controlled" (ADR 0004 trust boundary)
 	BundleDigest string      `json:"bundleDigest,omitempty"`
 	Transforms   []Transform `json:"transforms"`
 
@@ -82,8 +82,8 @@ func (c *Core) evidenceFor(sb *Sandbox) *Evidence {
 	ev, ok := c.evidence[sb.Name]
 	if !ok {
 		source := "managed"
-		if sb.Local {
-			source = "local"
+		if sb.UserControlled {
+			source = "user-controlled"
 		}
 		ev = &Evidence{
 			Sandbox: sb.Name, Source: source,
@@ -316,9 +316,9 @@ func (c *Core) requireManagedLocked(sandboxName, action string) error {
 	if !ok {
 		return errf(404, "sandbox %q is not known", sandboxName)
 	}
-	if sb.Local {
+	if sb.UserControlled {
 		return errf(403,
-			"cannot %s: sandbox %q runs on a user-controlled local cluster, so its evidence is not from a control-plane-managed sandbox and is non-postable and non-promotable (S3)",
+			"cannot %s: sandbox %q runs on a user-controlled cluster, so its evidence is not from a control-plane-managed sandbox and is non-postable and non-promotable (ADR 0004)",
 			action, sandboxName)
 	}
 	return nil

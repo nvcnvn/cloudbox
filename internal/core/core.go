@@ -114,6 +114,8 @@ func errf(status int, format string, args ...any) *Error {
 // Core is the whole control plane behind the HTTP surface.
 type Core struct {
 	integrations Integrations
+	// userControlled marks clusters registered as user-controlled (ADR 0010).
+	userControlled map[string]bool
 	mu     sync.Mutex
 	driver cluster.Driver
 	now    func() time.Time
@@ -182,11 +184,17 @@ func New(driver cluster.Driver, now func() time.Time) *Core {
 		// No integration is present until the deployment declares it
 		// (ADR 0009): a released control plane refuses rather than simulates.
 		integrations: Integrations{},
+		userControlled: map[string]bool{},
 	}
 }
 
 // RegisterCluster records a cluster's role in the ClusterRegistry (CP3).
-func (c *Core) RegisterCluster(name, role string) error {
+// RegisterCluster registers a cluster in a role. userControlled records that
+// the registrant controls the cluster (ADR 0010): sandboxes on it are marked
+// user-controlled and their evidence can never back a check or a promotion.
+// The control plane cannot verify custody, so the flag only ever narrows
+// trust: it can mark a cluster user-controlled, never make one managed.
+func (c *Core) RegisterCluster(name, role string, userControlled bool) error {
 	c.mu.Lock()
 	host, ok := c.driver.Cluster(name)
 	c.mu.Unlock()
@@ -209,6 +217,9 @@ func (c *Core) RegisterCluster(name, role string) error {
 		c.roles[name] = map[string]bool{}
 	}
 	c.roles[name][role] = true
+	if userControlled {
+		c.userControlled[name] = true
+	}
 	return nil
 }
 

@@ -203,22 +203,6 @@ func (c *Core) sandboxSubstrateDigest(sb *Sandbox) string {
 	return c.lockfileFor(sb.App, host).Digest
 }
 
-// provisionLocalCluster creates a user-controlled local cluster provisioned
-// from the application's substrate lockfile (S3, P3). Callers hold c.mu.
-func (c *Core) provisionLocalCluster(sandboxName, appName string) (cluster.Cluster, error) {
-	creator, ok := c.driver.(interface {
-		NewCluster(name string, enforcing bool, userControlled bool) cluster.Cluster
-	})
-	if !ok {
-		return nil, errf(500, "driver cannot provision local clusters")
-	}
-	local := creator.NewCluster("kind-"+sandboxName, true, true)
-	if prod, ok := c.productionCluster(); ok {
-		local.SetComponents(prod.KubernetesMinor(), prod.Components())
-	}
-	return local, nil
-}
-
 // ProvisionSandboxSubstrate makes a sandbox host provide the lockfile's
 // components (P3: provisioning is the convenience that makes verification
 // pass). Callers hold c.mu.
