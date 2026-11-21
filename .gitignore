@@ -9,3 +9,4 @@ acceptance-tests/.kube/
 
 # Build output
 /bin/
+__pycache__/
